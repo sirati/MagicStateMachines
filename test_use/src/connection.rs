@@ -67,8 +67,7 @@ impl Connection {
         self.transition()()
     }
 
-    pub(crate) fn endpoint(self: &State<impl SRef, Self, impl Online>) -> &str
-    {
+    pub(crate) fn endpoint(self: &State<impl SRef, Self, impl Online>) -> &str {
         &self.endpoint
     }
 
@@ -76,8 +75,7 @@ impl Connection {
         &self.endpoint
     }
 
-    pub(crate) fn user(self: &State<impl SRef, Self, Authenticated>) -> &str
-    {
+    pub(crate) fn user(self: &State<impl SRef, Self, Authenticated>) -> &str {
         self.user
             .as_deref()
             .expect("authenticated state always has a user")
