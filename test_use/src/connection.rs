@@ -1,6 +1,6 @@
-use statemachines::{SMut, SRef, State, StorageStateOwned};
+use statemachines::{SMut, SRef, SResult, State, StorageStateOwned};
 use test_def::{
-    ConnectionStandin, Online,
+    ConnectionStandin, Online, OnlineEnum,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -36,6 +36,20 @@ impl Connection {
         self.transition()()
     }
 
+    pub(crate) fn try_connect<S>(
+        self: State<S, Self, Disconnected>,
+        available: bool,
+    ) -> SResult<S, Self, Connected, Disconnected>
+    where
+        S: SRef,
+    {
+        if available {
+            Ok(self.connect())
+        } else {
+            Err(self)
+        }
+    }
+
     #[must_use]
     pub(crate) fn authenticate<S>(
         mut self: State<S, Self, Connected>,
@@ -47,6 +61,33 @@ impl Connection {
         let user = user.into();
         self.user = Some(user.clone());
         self.transition()(user)
+    }
+
+    #[must_use]
+    pub(crate) fn authenticate_if<S>(
+        self: State<S, Self, Connected>,
+        user: Option<String>,
+    ) -> OnlineEnum<S, Self>
+    where
+        S: SMut,
+    {
+        match user {
+            Some(user) => self.authenticate(user).into(),
+            None => self.into(),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn disconnect_online<S, Current>(
+        mut self: State<S, Self, Current>,
+    ) -> State<S, Self, Disconnected>
+    where
+        S: SMut,
+        Current: Online + statemachines::StateTrait,
+        ConnectionStandin: statemachines::Transition<Current, Disconnected, F = fn()>,
+    {
+        self.user = None;
+        self.transition()()
     }
 
     #[must_use]

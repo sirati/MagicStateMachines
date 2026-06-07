@@ -11,6 +11,15 @@ pub use owned::{
     StorageStateOwnedUniqueRc,
 };
 
+fn retag_owned<T, From, To>(inner: crate::StateOwned<T, From>) -> crate::StateOwned<T, To> {
+    crate::StateOwned {
+        value: inner.value,
+        state: PhantomData,
+        #[cfg(feature = "tracing")]
+        trace: inner.trace,
+    }
+}
+
 type StateMarker<Storage, T, S> = PhantomData<fn() -> (Storage, T, S)>;
 type TransitionMarker<Storage, T, From, To> = PhantomData<fn() -> (Storage, T, From, To)>;
 
@@ -26,6 +35,11 @@ pub trait StateStorage: Sized {
     where
         T: StateMachineImpl;
 
+    #[doc(hidden)]
+    fn retag<T, From, To>(inner: Self::Inner<T, From>) -> Self::Inner<T, To>
+    where
+        T: StateMachineImpl;
+
     fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         args: Args,
@@ -38,6 +52,19 @@ pub trait StateStorage: Sized {
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple;
+}
+
+pub(crate) fn retag_state<Storage, T, From, To>(
+    state: State<Storage, T, From>,
+) -> State<Storage, T, To>
+where
+    Storage: StateStorage,
+    T: StateMachineImpl,
+{
+    State {
+        inner: Storage::retag(state.inner),
+        marker: PhantomData,
+    }
 }
 
 /// Storage backend that can create initial owned state.
@@ -71,6 +98,14 @@ where
     pub(crate) inner: Storage::Inner<T, S>,
     pub(crate) marker: StateMarker<Storage, T, S>,
 }
+
+/// A result whose success and error values are states of the same machine.
+#[allow(type_alias_bounds)]
+pub type SResult<Storage, T, OkState, ErrState>
+where
+    Storage: StateStorage,
+    T: StateMachineImpl,
+= Result<State<Storage, T, OkState>, State<Storage, T, ErrState>>;
 
 /// A callable transition for generic [`State`] storage.
 pub struct StateTransitionCall<Storage, T, From, To>

@@ -83,8 +83,59 @@ pub fn connect(
 Operations shared by several states use a generated union marker:
 
 ```rust
-StateUnion!(Online: Connected + Authenticated);
+StateUnion!(Online: Connected | Authenticated);
 ```
+
+An explicitly named value-carrying enum can be generated together with the
+trait or by itself:
+
+```rust
+StateUnion!(Online, enum OnlineEnum: Connected | Authenticated);
+StateUnion!(enum OnlineEnum: Connected | Authenticated);
+```
+
+Union traits are sealed. They can inherit one or more previously defined union
+traits, with `+` separating supertraits and `|` separating member states:
+
+```rust
+StateUnion!(All: Disconnected | Connected | Authenticated);
+StateUnion!(Online: All, Connected | Authenticated);
+StateUnion!(Specific: All + Online, Connected | Authenticated);
+```
+
+Each union has a generated joint ZST state. `OnlineEnum<Storage, T>` preserves
+the concrete variant while every variant exposes the same
+`State<Storage, T, JointOnlineState>` view. Concrete states convert into the
+enum with `Into`, and matching variants recover their concrete state with
+`into_state()`.
+
+Functions with one success and one failure state can use the shorter result
+alias:
+
+```rust
+fn try_connect<S>(
+    self: State<S, Self, Disconnected>,
+) -> SResult<S, Self, Connected, Disconnected>;
+```
+
+Generated union enums dereference to their common joint `State`. Existing
+inherent methods restricted by the union trait therefore work directly:
+
+```rust
+fn endpoint(
+    self: &State<impl SRef, Self, impl Online>,
+) -> &str {
+    &self.endpoint
+}
+
+let online: OnlineEnum<_, Connection> = connected.into();
+online.endpoint();
+```
+
+Consuming `into_joint()` exposes the joint state. It has a transition to a
+target only when every member state has that transition with the same
+associated function signature. This permits generic shared transitions without
+weakening the state-machine contract.
 
 The concrete owned state marker is a zero-sized `PhantomData`;
 `#[repr(transparent)]` makes `StateOwned<T, S>` layout-compatible with `T`.

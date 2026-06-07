@@ -8,10 +8,17 @@ version = "0.1.0"
 source = "git+https://github.com/sirati/DynZSTBox.rs?rev=0d982f22e063f43000b99fc6f98d0819d5441044#0d982f22e063f43000b99fc6f98d0819d5441044"
 
 [[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
 name = "statemachines"
 version = "0.1.0"
 dependencies = [
  "dynzst",
+ "paste",
 ]
 
 [[package]]

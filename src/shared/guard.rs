@@ -61,6 +61,17 @@ where
     where
         T: StateMachineImpl;
 
+    fn retag<T, From, To>(mut inner: Self::Inner<T, From>) -> Self::Inner<T, To>
+    where
+        T: StateMachineImpl,
+    {
+        StateMut {
+            guard: inner.guard.take(),
+            pending: state_trait::clone_erased(&inner.pending),
+            marker: PhantomData,
+        }
+    }
+
     fn complete_transition<T, From, To, Args>(
         mut state: State<Self, T, From>,
         _args: Args,

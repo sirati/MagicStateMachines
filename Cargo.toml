@@ -25,6 +25,7 @@ test_def = { path = "test_def" }
 
 [dependencies]
 dynzst.workspace = true
+paste = "1.0.15"
 
 [lib]
 path = "src/lib.rs"

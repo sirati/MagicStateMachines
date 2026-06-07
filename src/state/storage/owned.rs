@@ -31,6 +31,13 @@ impl StateStorage for StorageStateOwned {
     where
         T: StateMachineImpl;
 
+    fn retag<T, From, To>(inner: Self::Inner<T, From>) -> Self::Inner<T, To>
+    where
+        T: StateMachineImpl,
+    {
+        super::retag_owned(inner)
+    }
+
     fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         _args: Args,
@@ -90,6 +97,13 @@ macro_rules! indirect_owned_storage {
                 = $wrapper<T>
             where
                 T: StateMachineImpl;
+
+            fn retag<T, From, To>(inner: Self::Inner<T, From>) -> Self::Inner<T, To>
+            where
+                T: StateMachineImpl,
+            {
+                super::retag_owned(inner)
+            }
 
             fn complete_transition<T, From, To, Args>(
                 state: State<Self, T, From>,
@@ -154,6 +168,13 @@ impl StateStorage for StorageStateOwnedPinBox {
         = Pin<Box<T>>
     where
         T: StateMachineImpl;
+
+    fn retag<T, From, To>(inner: Self::Inner<T, From>) -> Self::Inner<T, To>
+    where
+        T: StateMachineImpl,
+    {
+        super::retag_owned(inner)
+    }
 
     fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,

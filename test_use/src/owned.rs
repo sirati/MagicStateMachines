@@ -1,11 +1,20 @@
 use crate::connection::Connection;
 use statemachines::{State, StorageStateOwnedBox};
-use test_def::states::Disconnected;
+use test_def::{OnlineEnum, states::Disconnected};
 
 pub(crate) fn run() {
     let connection = Connection::disconnected("localhost:8080");
-    let connection = connection.connect();
-    let connection = connection.authenticate("alice");
+    let connection = match connection.try_connect(true) {
+        Ok(connection) => connection,
+        Err(_) => return,
+    };
+    let online = connection.authenticate_if(Some("alice".into()));
+    println!("{} is online", online.endpoint());
+
+    let connection = match online {
+        OnlineEnum::Authenticated(connection) => connection.into_state(),
+        OnlineEnum::Connected(_) => return,
+    };
 
     println!(
         "{} is authenticated as {}",
@@ -17,6 +26,11 @@ pub(crate) fn run() {
     println!("{} is still online", connection.endpoint());
 
     let _connection = connection.disconnect();
+
+    let online = Connection::disconnected("localhost:8081")
+        .connect()
+        .authenticate_if(None);
+    let _disconnected = online.into_joint().disconnect_online();
 
     let boxed: State<StorageStateOwnedBox, Connection, Disconnected> =
         State::new(Connection::new("localhost:9090"));

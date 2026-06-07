@@ -17,6 +17,7 @@
 
 mod contract;
 mod decomposed;
+mod macros;
 mod policy;
 mod shared;
 mod state;
@@ -24,6 +25,7 @@ mod state;
 mod state_trait;
 #[cfg(feature = "tracing")]
 pub mod tracing;
+mod union;
 
 pub use contract::{Initial, StateMachineImpl, Transition};
 pub use decomposed::{DecomposedData, DecomposedState, RecomposeError};
@@ -34,155 +36,20 @@ pub use shared::{
     StateRef, StorageStateMut, transition_mut,
 };
 pub use state::{
-    SMut, SRef, State, StateOwned, StateOwnedBox, StateOwnedPin, StateOwnedPinBox, StateStorage,
-    StateStorageNew, StateTransitionCall, StorageStateOwned, StorageStateOwnedBox,
+    SMut, SRef, SResult, State, StateOwned, StateOwnedBox, StateOwnedPin, StateOwnedPinBox,
+    StateStorage, StateStorageNew, StateTransitionCall, StorageStateOwned, StorageStateOwnedBox,
     StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, TransitionCall,
     TransitionCallsite, transition, transition_state,
 };
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]
 pub use tracing::TraceEntry;
+#[doc(hidden)]
+pub use union::{StateUnionMember, StateUnionState, StateUnionTransition, StateUnionVariant};
 
-/// Defines a public marker trait implemented by each listed state.
-///
-/// This allows implementation methods to accept a union of states without
-/// weakening the transition contract.
-#[macro_export]
-macro_rules! StateUnion {
-    ($name:ident: $first:ident $(+ $state:ident)* $(,)?) => {
-        pub trait $name {}
-
-        impl $name for $first {}
-
-        $(
-            impl $name for $state {}
-        )*
-    };
-}
-
-/// Connects a runtime type to a definition and adds private transition helpers.
-///
-/// Invoke this once in the module that implements the runtime's methods:
-///
-/// ```ignore
-/// StateMachineImpl!(Connection: ConnectionStandin);
-///
-/// impl Connection {
-///     fn connect<Storage>(
-///         self: State<Storage, Self, Disconnected>,
-///     ) -> State<Storage, Self, Connected>
-///     where
-///         Storage: SRef,
-///     {
-///         self.transition()()
-///     }
-/// }
-/// ```
-#[macro_export]
-macro_rules! StateMachineImpl {
-    ($implementation:ty : $standin:ty $(,)?) => {
-        #[doc(hidden)]
-        pub struct __StateMachineTransitionToken(());
-
-        impl $crate::StateMachineImpl for $implementation {
-            type Standin = $standin;
-            type Impl = $implementation;
-            type TransitionToken = __StateMachineTransitionToken;
-        }
-
-        trait __StateTransitionExt<T, From>
-        where
-            T: $crate::StateMachineImpl,
-        {
-            #[must_use]
-            #[track_caller]
-            fn transition<To>(self) -> $crate::TransitionCall<T, From, To>
-            where
-                T::Standin: $crate::Transition<From, To>;
-        }
-
-        impl<T, From> __StateTransitionExt<T, From> for $crate::StateOwned<T, From>
-        where
-            T: $crate::StateMachineImpl<
-                    Standin = $standin,
-                    Impl = $implementation,
-                    TransitionToken = __StateMachineTransitionToken,
-                >,
-        {
-            #[track_caller]
-            fn transition<To>(self) -> $crate::TransitionCall<T, From, To>
-            where
-                T::Standin: $crate::Transition<From, To>,
-            {
-                $crate::transition(self, __StateMachineTransitionToken(()))
-            }
-        }
-
-        trait __GenericStateTransitionExt<Storage, T, From>
-        where
-            T: $crate::StateMachineImpl,
-            Storage: $crate::StateStorage,
-            Storage::Machine<T>: $crate::StateMachineImpl,
-        {
-            #[must_use]
-            #[track_caller]
-            fn transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
-            where
-                From: $crate::StateTrait,
-                To: $crate::StateTrait,
-                T::Standin: $crate::Transition<From, To>;
-        }
-
-        impl<Storage, T, From> __GenericStateTransitionExt<Storage, T, From>
-            for $crate::State<Storage, T, From>
-        where
-            T: $crate::StateMachineImpl,
-            Storage: $crate::StateStorage,
-            Storage::Machine<T>: $crate::StateMachineImpl<
-                    Standin = $standin,
-                    Impl = $implementation,
-                    TransitionToken = __StateMachineTransitionToken,
-                >,
-        {
-            #[track_caller]
-            fn transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
-            where
-                From: $crate::StateTrait,
-                To: $crate::StateTrait,
-                T::Standin: $crate::Transition<From, To>,
-            {
-                $crate::transition_state(self, __StateMachineTransitionToken(()))
-            }
-        }
-
-        trait __StateMutTransitionExt<G, T, From>
-        where
-            G: ::core::ops::DerefMut<Target = $crate::SharedValue<T>>,
-            T: $crate::StateMachineImpl,
-        {
-            #[must_use]
-            fn transition<To>(self) -> $crate::StateMutTransitionCall<G, T, From, To>
-            where
-                T::Standin: $crate::Transition<From, To>;
-        }
-
-        impl<G, T, From> __StateMutTransitionExt<G, T, From> for $crate::StateMut<G, T, From>
-        where
-            G: ::core::ops::DerefMut<Target = $crate::SharedValue<T>>,
-            T: $crate::StateMachineImpl<
-                    Standin = $standin,
-                    Impl = $implementation,
-                    TransitionToken = __StateMachineTransitionToken,
-                >,
-        {
-            fn transition<To>(self) -> $crate::StateMutTransitionCall<G, T, From, To>
-            where
-                T::Standin: $crate::Transition<From, To>,
-            {
-                $crate::transition_mut(self, __StateMachineTransitionToken(()))
-            }
-        }
-    };
+#[doc(hidden)]
+pub mod __private {
+    pub use paste::paste;
 }
 
 #[cfg(test)]
