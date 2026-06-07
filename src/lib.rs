@@ -31,9 +31,9 @@ pub use contract::{Initial, StateMachineImpl, Transition};
 pub use decomposed::{DecomposedData, DecomposedState, RecomposeError};
 pub use policy::{StateClone, StateCopy};
 pub use shared::{
-    ArcState, MutexState, MutexStorage, RcState, RefCellState, RefCellStorage, SharedState,
-    SharedStateError, SharedStorage, SharedValue, StateMut, StateMutTransitionCall, StateMutView,
-    StateRef, StorageStateMut, transition_mut,
+    ArcState, MutexState, MutexStorage, RcState, RefCellState, RefCellStorage, SharedBorrowState,
+    SharedState, SharedStateError, SharedStorage, SharedValue, StateMut, StateMutTransitionCall,
+    StateMutView, StateRef, StorageStateMut, transition_mut,
 };
 pub use state::{
     SMove, SMut, SOwned, SRef, SResult, State, StateOwned, StateOwnedBox, StateOwnedPin,
@@ -47,7 +47,9 @@ pub use tracing::TraceEntry;
 #[doc(hidden)]
 pub use union::StateUnionConcreteState;
 #[doc(hidden)]
-pub use union::{StateUnionMember, StateUnionState, StateUnionTransition, StateUnionVariant};
+pub use union::{
+    StateUnionMember, StateUnionRuntime, StateUnionState, StateUnionTransition, StateUnionVariant,
+};
 
 #[doc(hidden)]
 pub mod __private {

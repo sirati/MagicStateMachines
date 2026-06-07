@@ -1,6 +1,6 @@
 use crate::{
     Initial, MutexState, RefCellState, SMove, SOwned, SharedStateError, State, StateCopy,
-    StateMachineImpl, StateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox,
+    StateMachineImpl, StateOwned, StateUnionState, StorageStateOwnedBox, StorageStateOwnedPinBox,
     StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, Transition, transition,
     transition_state,
 };
@@ -13,7 +13,9 @@ use std::sync::UniqueArc;
 
 struct Machine;
 struct Ready;
-struct Running;
+pub struct Running;
+
+crate::StateUnion!(Active: Running);
 
 #[derive(Clone, Copy)]
 struct Runtime;
@@ -202,6 +204,32 @@ fn rc_state_guard_commits_transition_on_drop() {
         Err(SharedStateError::WrongState { .. })
     ));
     assert_eq!(alias.borrow::<Running>().expect("committed state").value, 3);
+}
+
+#[test]
+fn rc_state_borrows_committed_state_through_erased_union() {
+    let state = RefCellState::new::<Ready>(SharedRuntime { value: 10 });
+    let alias = state.clone();
+
+    let guard = state.borrow_mut::<Ready>().expect("initial state");
+    let guard = transition_state::<_, _, _, Running>(guard, TransitionToken)();
+    drop(guard);
+
+    {
+        let erased = alias
+            .borrow::<StateUnionState<Active>>()
+            .expect("running is active");
+        assert_eq!(erased.value, 10);
+    }
+
+    {
+        let erased = alias
+            .borrow_mut::<StateUnionState<Active>>()
+            .expect("running is active");
+        drop(erased);
+    }
+
+    assert_eq!(alias.borrow::<Running>().expect("still concrete").value, 10);
 }
 
 #[test]

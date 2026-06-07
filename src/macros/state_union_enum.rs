@@ -41,11 +41,12 @@ macro_rules! __StateUnionEnum {
         }
     };
     (
-        @conversion_trait $name:ident $enum_name:ident:
+        @conversion_trait $marker:ident $enum_name:ident:
         $first:ident $(| $state:ident)*
     ) => {
         $crate::__private::paste! {
-            pub trait [<$name IntoEnum>]: $name + $crate::StateUnionConcreteState {
+            #[allow(dead_code)]
+            pub trait [<$marker IntoEnum>]: [<In $marker>] + $crate::StateUnionConcreteState {
                 #[must_use]
                 fn into_enum<Storage, T>(
                     state: $crate::State<Storage, T, Self>,
@@ -56,7 +57,7 @@ macro_rules! __StateUnionEnum {
                     T: $crate::StateMachineImpl;
             }
 
-            impl [<$name IntoEnum>] for $first {
+            impl [<$marker IntoEnum>] for $first {
                 fn into_enum<Storage, T>(
                     state: $crate::State<Storage, T, Self>,
                 ) -> $enum_name<Storage, T>
@@ -70,7 +71,7 @@ macro_rules! __StateUnionEnum {
             }
 
             $(
-                impl [<$name IntoEnum>] for $state {
+                impl [<$marker IntoEnum>] for $state {
                     fn into_enum<Storage, T>(
                         state: $crate::State<Storage, T, Self>,
                     ) -> $enum_name<Storage, T>
@@ -89,6 +90,7 @@ macro_rules! __StateUnionEnum {
         @enum $enum_name:ident $marker:ident:
         $first:ident $(| $state:ident)*
     ) => {
+        #[allow(dead_code)]
         pub enum $enum_name<Storage, T>
         where
             Storage: $crate::StateStorage,
@@ -117,6 +119,7 @@ macro_rules! __StateUnionEnum {
             }
         }
 
+        #[allow(dead_code)]
         impl<Storage, T> $enum_name<Storage, T>
         where
             Storage: $crate::StateStorage,

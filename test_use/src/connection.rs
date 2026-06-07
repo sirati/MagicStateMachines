@@ -1,6 +1,6 @@
 use statemachines::{SMut, SOwned, SRef, SResult, State};
 use test_def::{
-    ConnectionStandin, Online, OnlineEnum,
+    ConnectionStandin, InOnline, OnlineEnum, OnlineIntoEnum,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -76,14 +76,37 @@ impl Connection {
     }
 
     #[must_use]
+    pub(crate) fn as_online_enum<S>(
+        self: State<S, Self, impl OnlineIntoEnum>,
+    ) -> OnlineEnum<S, Self>
+    where
+        S: SRef,
+    {
+        <_ as OnlineIntoEnum>::into_enum(self)
+    }
+
+    #[must_use]
+    pub(crate) fn disconnect_online<S, Current>(
+        mut self: State<S, Self, Current>,
+    ) -> State<S, Self, Disconnected>
+    where
+        S: SMut,
+        Current: InOnline + statemachines::StateTrait,
+        ConnectionStandin: statemachines::Transition<Current, Disconnected, F = fn()>,
+    {
+        self.user = None;
+        self.transition()()
+    }
+
+    #[must_use]
     pub(crate) fn disconnect<S>(
-        mut self: State<S, Self, impl Online>,
+        mut self: State<S, Self, impl InOnline>,
     ) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
         self.user = None;
-        <_ as Online>::into_erased(self).transition()()
+        <_ as InOnline>::into_erased(self).transition()()
     }
 
     #[must_use]
@@ -95,7 +118,7 @@ impl Connection {
         self.transition()()
     }
 
-    pub(crate) fn endpoint(self: &State<impl SRef, Self, impl Online>) -> &str {
+    pub(crate) fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str {
         &self.endpoint
     }
 

@@ -2,8 +2,8 @@
 ///
 /// The supported forms are:
 ///
-/// - `StateUnion!(Online: Connected | Authenticated)` for a marker trait and `OnlineEnum`.
-/// - `StateUnion!(Online: Parent, Connected | Authenticated)` with a supertrait and `OnlineEnum`.
+/// - `StateUnion!(Online: Connected | Authenticated)` for marker `Online`, trait `InOnline`, and `OnlineEnum`.
+/// - `StateUnion!(Online: Parent, Connected | Authenticated)` with supertrait `InParent` and `OnlineEnum`.
 /// - `StateUnion!(Online, enum CustomOnline: Connected | Authenticated)` with a custom enum name.
 /// - `StateUnion!(enum OnlineEnum: Connected | Authenticated)` for only an enum.
 ///
@@ -16,7 +16,7 @@
 /// struct Other;
 ///
 /// StateUnion!(Online: Connected);
-/// impl Online for Other {}
+/// impl InOnline for Other {}
 /// ```
 ///
 /// A joint-state transition exists only when every member supports the same
@@ -38,7 +38,7 @@
 ///     Machine: Transition<From, Disconnected>,
 /// {}
 ///
-/// requires_disconnect::<StateUnionState<__state_union_marker_online>>();
+/// requires_disconnect::<StateUnionState<Online>>();
 /// ```
 ///
 /// A joint state cannot be converted back into a concrete enum variant:
@@ -60,7 +60,7 @@
 ///
 /// StateUnion!(Online, enum OnlineEnum: Connected | Authenticated);
 ///
-/// type OnlineJoint = StateUnionState<__state_union_marker_online>;
+/// type OnlineJoint = StateUnionState<Online>;
 ///
 /// fn cannot_recover_variant(state: State<StorageStateOwned, Runtime, OnlineJoint>) {
 ///     let _ = <OnlineJoint as OnlineIntoEnum>::into_enum(state);
@@ -78,7 +78,7 @@ macro_rules! StateUnion {
                 $first $(| $state)*
             );
             $crate::__StateUnion!(
-                @enum [<$name Enum>] [<__state_union_marker_ $name:snake>]:
+                @enum [<$name Enum>] $name:
                 $first $(| $state)*
             );
         }
@@ -90,7 +90,7 @@ macro_rules! StateUnion {
         $crate::__StateUnion!(@trait $name [] [enum $enum_name]: $first $(| $state)*);
         $crate::__private::paste! {
             $crate::__StateUnion!(
-                @enum $enum_name [<__state_union_marker_ $name:snake>]:
+                @enum $enum_name $name:
                 $first $(| $state)*
             );
         }
@@ -106,7 +106,7 @@ macro_rules! StateUnion {
                 $first $(| $state)*
             );
             $crate::__StateUnion!(
-                @enum [<$name Enum>] [<__state_union_marker_ $name:snake>]:
+                @enum [<$name Enum>] $name:
                 $first $(| $state)*
             );
         }
@@ -123,7 +123,7 @@ macro_rules! StateUnion {
         );
         $crate::__private::paste! {
             $crate::__StateUnion!(
-                @enum $enum_name [<__state_union_marker_ $name:snake>]:
+                @enum $enum_name $name:
                 $first $(| $state)*
             );
         }

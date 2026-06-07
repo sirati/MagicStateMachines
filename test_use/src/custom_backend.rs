@@ -1,7 +1,10 @@
 use crate::connection::Connection;
-use statemachines::{RcState, SharedStateError, SharedStorage, SharedValue};
+use statemachines::{RcState, SharedStateError, SharedStorage, SharedValue, StateUnionState};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use test_def::states::{Connected, Disconnected};
+use test_def::{
+    Online,
+    states::{Connected, Disconnected},
+};
 
 /// A non-generic backend marker. Its GAT selects storage for each data type.
 pub(crate) struct RwLockStorage;
@@ -44,4 +47,9 @@ pub(crate) fn run() {
         "{} uses the custom RwLock backend",
         connected.raw_endpoint()
     );
+
+    let online = alias
+        .borrow::<StateUnionState<Online>>()
+        .expect("committed online state");
+    println!("{} can be borrowed through erasure", online.raw_endpoint());
 }

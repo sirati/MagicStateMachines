@@ -1,6 +1,7 @@
 use super::{SharedStateError, SharedStorage, SharedValue};
 use crate::{
-    SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait, Transition, TransitionCallsite,
+    SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait, StateUnionRuntime,
+    StateUnionState, Transition, TransitionCallsite,
     state_trait::{self, ErasedState},
 };
 use core::marker::PhantomData;
@@ -14,10 +15,10 @@ pub struct StateRef<G, T, S> {
 impl<G, T, S> StateRef<G, T, S>
 where
     G: Deref<Target = SharedValue<T>>,
-    S: StateTrait,
+    S: SharedBorrowState,
 {
     pub(super) fn from_guard(guard: G) -> Result<Self, SharedStateError> {
-        ensure_state::<S>(&guard.state)?;
+        S::ensure_state(&guard.state)?;
         Ok(Self {
             guard,
             marker: PhantomData,
@@ -123,13 +124,14 @@ where
 impl<G, T, S> StateMut<G, T, S>
 where
     G: DerefMut<Target = SharedValue<T>>,
-    S: StateTrait,
+    S: SharedBorrowState,
 {
     pub(super) fn from_guard(guard: G) -> Result<Self, SharedStateError> {
-        ensure_state::<S>(&guard.state)?;
+        S::ensure_state(&guard.state)?;
+        let pending = S::initial_pending(&guard.state);
         Ok(Self {
             guard: Some(guard),
-            pending: state_trait::erased_state::<S>(),
+            pending,
             marker: PhantomData,
         })
     }
@@ -213,16 +215,52 @@ where
     }
 }
 
-fn ensure_state<S>(actual: &ErasedState) -> Result<(), SharedStateError>
+pub trait SharedBorrowState: StateTrait {
+    fn ensure_state(actual: &ErasedState) -> Result<(), SharedStateError>;
+    fn initial_pending(actual: &ErasedState) -> ErasedState;
+}
+
+pub auto trait ExactSharedBorrowState {}
+
+impl<Marker> !ExactSharedBorrowState for StateUnionState<Marker> {}
+
+impl<S> SharedBorrowState for S
 where
-    S: StateTrait,
+    S: StateTrait + ExactSharedBorrowState,
 {
-    if state_trait::is_state::<S>(actual) {
-        Ok(())
-    } else {
-        Err(SharedStateError::WrongState {
-            expected: core::any::type_name::<S>(),
-            actual: actual.type_name(),
-        })
+    fn ensure_state(actual: &ErasedState) -> Result<(), SharedStateError> {
+        if state_trait::is_state::<S>(actual) {
+            Ok(())
+        } else {
+            Err(SharedStateError::WrongState {
+                expected: core::any::type_name::<S>(),
+                actual: actual.type_name(),
+            })
+        }
+    }
+
+    fn initial_pending(_actual: &ErasedState) -> ErasedState {
+        state_trait::erased_state::<S>()
+    }
+}
+
+impl<Marker> SharedBorrowState for StateUnionState<Marker>
+where
+    Marker: StateUnionRuntime + 'static,
+    StateUnionState<Marker>: StateTrait,
+{
+    fn ensure_state(actual: &ErasedState) -> Result<(), SharedStateError> {
+        if Marker::contains(&**actual) {
+            Ok(())
+        } else {
+            Err(SharedStateError::WrongState {
+                expected: Marker::expected_type_name(),
+                actual: actual.type_name(),
+            })
+        }
+    }
+
+    fn initial_pending(actual: &ErasedState) -> ErasedState {
+        state_trait::clone_erased(actual)
     }
 }

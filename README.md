@@ -80,8 +80,9 @@ pub fn connect(
 }
 ```
 
-Operations shared by several states use a generated union marker and a default
-value-carrying enum named `{UnionName}Enum`:
+Operations shared by several states use a generated public union marker,
+a sealed membership trait named `In{UnionName}`, and a default value-carrying
+enum named `{UnionName}Enum`:
 
 ```rust
 StateUnion!(Online: Connected | Authenticated);
@@ -95,8 +96,9 @@ StateUnion!(Online, enum CustomOnline: Connected | Authenticated);
 StateUnion!(enum OnlineValue: Connected | Authenticated);
 ```
 
-Union traits are sealed. They can inherit one or more previously defined union
-traits, with `+` separating supertraits and `|` separating member states:
+Union membership traits are sealed. They can inherit one or more previously
+defined union membership traits, with `+` separating supertrait markers and `|`
+separating member states:
 
 ```rust
 StateUnion!(All: Disconnected | Connected | Authenticated);
@@ -137,7 +139,7 @@ inherent methods restricted by the union trait therefore work directly:
 
 ```rust
 fn endpoint(
-    self: &State<impl SRef, Self, impl Online>,
+    self: &State<impl SRef, Self, impl InOnline>,
 ) -> &str {
     &self.endpoint
 }

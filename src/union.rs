@@ -1,4 +1,4 @@
-use crate::{State, StateMachineImpl, StateStorage, Transition};
+use crate::{State, StateMachineImpl, StateStorage, StateTrait, Transition};
 use core::marker::PhantomData;
 use core::ops::Deref;
 
@@ -15,6 +15,13 @@ impl<Marker> !StateUnionConcreteState for StateUnionState<Marker> {}
 /// Records that `State` belongs to a generated state union.
 #[doc(hidden)]
 pub trait StateUnionMember<State> {}
+
+/// Runtime membership check for shared erased-state borrows.
+#[doc(hidden)]
+pub trait StateUnionRuntime {
+    fn contains(state: &dyn StateTrait) -> bool;
+    fn expected_type_name() -> &'static str;
+}
 
 /// Resolves transitions supported by every member of a generated state union.
 #[doc(hidden)]

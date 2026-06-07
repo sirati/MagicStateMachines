@@ -1,12 +1,14 @@
 mod guard;
 mod storage;
 
-use crate::{Initial, State, StateMachineImpl, StateTrait, state_trait};
+use crate::{Initial, State, StateMachineImpl, state_trait};
 use core::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
 
-pub use guard::{StateMut, StateMutTransitionCall, StateRef, StorageStateMut, transition_mut};
+pub use guard::{
+    SharedBorrowState, StateMut, StateMutTransitionCall, StateRef, StorageStateMut, transition_mut,
+};
 pub use storage::{MutexStorage, RefCellStorage, SharedStateError, SharedStorage, SharedValue};
 
 /// Shared state using an explicit, replaceable storage backend.
@@ -39,7 +41,7 @@ where
     pub fn new<State>(value: T) -> Self
     where
         T::Standin: Initial<State>,
-        State: StateTrait,
+        State: crate::StateTrait,
     {
         Self {
             storage: P::from(Backend::new(SharedValue {
@@ -55,7 +57,7 @@ where
         &self,
     ) -> Result<StateRef<Backend::ReadGuard<'_, T>, T, State>, SharedStateError>
     where
-        State: StateTrait,
+        State: SharedBorrowState,
     {
         StateRef::from_guard(Backend::read(self.storage.as_ref())?)
     }
@@ -64,7 +66,7 @@ where
         &self,
     ) -> Result<StateMutView<'_, Backend, T, StateMarker>, SharedStateError>
     where
-        StateMarker: StateTrait,
+        StateMarker: SharedBorrowState,
     {
         StateMut::from_guard(Backend::write(self.storage.as_ref())?).map(State::from_inner)
     }
