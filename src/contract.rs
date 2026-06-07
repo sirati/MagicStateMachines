@@ -16,6 +16,9 @@ pub trait Transition<TFrom, TTo> {
 
 /// Connects an implementation type to a state-machine definition.
 ///
+/// Implementations are `'static` so storage backends can provide borrowed
+/// guard families without repeating the implementation type in the backend.
+///
 /// [`crate::StateMachineImpl!`] generates this implementation and keeps the
 /// transition capability's construction private:
 ///
@@ -71,7 +74,7 @@ pub trait Transition<TFrom, TTo> {
 /// let ready = implementation::ready();
 /// let _ = ready.transition::<implementation::Running>()();
 /// ```
-pub trait StateMachineImpl {
+pub trait StateMachineImpl: 'static {
     /// Definition-crate ZST used to select the state-machine contract.
     type Standin;
 

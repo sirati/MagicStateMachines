@@ -1,4 +1,4 @@
-use statemachines::{State, StateStorageDeref, StateStorageDerefMut, StorageStateOwned};
+use statemachines::{SMut, SRef, State, StorageStateOwned};
 use test_def::{
     ConnectionStandin, Online,
     states::{Authenticated, Connected, Disconnected},
@@ -12,8 +12,6 @@ pub(crate) struct Connection {
 }
 
 statemachines::StateMachineImpl!(Connection: ConnectionStandin);
-
-
 
 impl Connection {
     pub(crate) fn new(endpoint: impl Into<String>) -> Self {
@@ -31,11 +29,9 @@ impl Connection {
     }
 
     #[must_use]
-    pub(crate) fn connect<S>(
-        self: State<S, Self, Disconnected>,
-    ) -> State<S, Self, Connected>
+    pub(crate) fn connect<S>(self: State<S, Self, Disconnected>) -> State<S, Self, Connected>
     where
-        S: StateStorageDeref<Self>,
+        S: SRef,
     {
         self.transition()()
     }
@@ -46,7 +42,7 @@ impl Connection {
         user: impl Into<String>,
     ) -> State<S, Self, Authenticated>
     where
-        S: StateStorageDerefMut<Self>,
+        S: SMut,
     {
         let user = user.into();
         self.user = Some(user.clone());
@@ -54,30 +50,24 @@ impl Connection {
     }
 
     #[must_use]
-    pub(crate) fn disconnect<S>(
-        mut self: State<S, Self, Connected>,
-    ) -> State<S, Self, Disconnected>
+    pub(crate) fn disconnect<S>(mut self: State<S, Self, Connected>) -> State<S, Self, Disconnected>
     where
-        S: StateStorageDerefMut<Self>,
+        S: SMut,
     {
         self.user = None;
         self.transition()()
     }
 
     #[must_use]
-    pub(crate) fn logout<S>(
-        mut self: State<S, Self, Authenticated>,
-    ) -> State<S, Self, Connected>
+    pub(crate) fn logout<S>(mut self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
     where
-        S: StateStorageDerefMut<Self>,
+        S: SMut,
     {
         self.user = None;
         self.transition()()
     }
 
-    pub(crate) fn endpoint<S>(self: &State<S, Self, impl Online>) -> &str
-    where
-        S: StateStorageDeref<Self>,
+    pub(crate) fn endpoint(self: &State<impl SRef, Self, impl Online>) -> &str
     {
         &self.endpoint
     }
@@ -86,9 +76,7 @@ impl Connection {
         &self.endpoint
     }
 
-    pub(crate) fn user<S>(self: &State<S, Self, Authenticated>) -> &str
-    where
-        S: StateStorageDeref<Self>,
+    pub(crate) fn user(self: &State<impl SRef, Self, Authenticated>) -> &str
     {
         self.user
             .as_deref()

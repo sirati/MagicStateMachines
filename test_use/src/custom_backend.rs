@@ -31,15 +31,13 @@ impl SharedStorage for RwLockStorage {
 }
 
 pub(crate) fn run() {
-    let shared =
-        RcState::<RwLockStorage, _>::new(Connection::new("localhost:7070"));
+    let shared = RcState::<RwLockStorage, _>::new(Connection::new("localhost:7070"));
     let alias = shared.clone();
 
     if let Ok(guard) = shared.borrow_mut::<Disconnected>() {
-            
         let connected = guard.connect();
+        drop(connected);
     }
-    drop(connected);
 
     let connected = alias.borrow::<Connected>().expect("committed state");
     println!(

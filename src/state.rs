@@ -233,22 +233,24 @@ impl<T: core::fmt::Debug, S> core::fmt::Debug for StateOwned<T, S> {
 }
 
 /// Storage backend used by [`State`].
-pub trait StateStorage<T>: Sized
-where
-    T: StateMachineImpl,
-{
+pub trait StateStorage: Sized {
     /// Concrete state representation used by this storage backend.
-    type Inner<S>;
+    type Inner<T, S>
+    where
+        T: StateMachineImpl;
 
     /// Type that carries the state-machine implementation contract.
-    type Machine: StateMachineImpl<Standin = T::Standin, Impl = T::Impl, TransitionToken = T::TransitionToken>;
+    type Machine<T>: StateMachineImpl<Standin = T::Standin, Impl = T::Impl, TransitionToken = T::TransitionToken>
+    where
+        T: StateMachineImpl;
 
-    fn complete_transition<From, To, Args>(
+    fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         args: Args,
         callsite: TransitionCallsite,
     ) -> State<Self, T, To>
     where
+        T: StateMachineImpl,
         From: crate::StateTrait,
         To: crate::StateTrait,
         T::Standin: Transition<From, To>,
@@ -257,38 +259,34 @@ where
 }
 
 /// Storage backend that can create initial owned state.
-pub trait StateStorageNew<T>: StateStorage<T>
-where
-    T: StateMachineImpl,
-{
-    fn new<State>(value: T) -> Self::Inner<State>
+pub trait StateStorageNew: StateStorage {
+    fn new<T, State>(value: T) -> Self::Inner<T, State>
     where
-        <Self::Machine as StateMachineImpl>::Standin: Initial<State>;
+        T: StateMachineImpl,
+        <Self::Machine<T> as StateMachineImpl>::Standin: Initial<State>;
 }
 
 /// Storage backend that can expose a runtime reference.
-pub trait StateStorageDeref<T>: StateStorage<T>
-where
-    T: StateMachineImpl,
-{
-    fn deref<State>(inner: &Self::Inner<State>) -> &T;
+pub trait SRef: StateStorage {
+    fn s_ref<T, State>(inner: &Self::Inner<T, State>) -> &T
+    where
+        T: StateMachineImpl;
 }
 
 /// Storage backend that can expose a mutable runtime reference.
-pub trait StateStorageDerefMut<T>: StateStorageDeref<T>
-where
-    T: StateMachineImpl,
-{
-    fn deref_mut<State>(inner: &mut Self::Inner<State>) -> &mut T;
+pub trait SMut: SRef {
+    fn s_mut<T, State>(inner: &mut Self::Inner<T, State>) -> &mut T
+    where
+        T: StateMachineImpl;
 }
 
 /// A state token parameterized by its storage backend.
 pub struct State<Storage, T, S>
 where
     T: StateMachineImpl,
-    Storage: StateStorage<T>,
+    Storage: StateStorage,
 {
-    pub(crate) inner: Storage::Inner<S>,
+    pub(crate) inner: Storage::Inner<T, S>,
     pub(crate) marker: StateMarker<Storage, T, S>,
 }
 
@@ -311,7 +309,7 @@ pub struct StorageStateOwnedUniqueArc;
 pub struct StateTransitionCall<Storage, T, From, To>
 where
     T: StateMachineImpl,
-    Storage: StateStorage<T>,
+    Storage: StateStorage,
 {
     state: State<Storage, T, From>,
     #[cfg(feature = "tracing")]
@@ -328,7 +326,7 @@ pub type TransitionCallsite = ();
 impl<Storage, T, From, To, Args> FnOnce<Args> for StateTransitionCall<Storage, T, From, To>
 where
     T: StateMachineImpl,
-    Storage: StateStorage<T>,
+    Storage: StateStorage,
     T::Standin: Transition<From, To>,
     <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
     Args: core::marker::Tuple,
@@ -354,11 +352,11 @@ where
 #[track_caller]
 pub fn transition_state<Storage, T, S, Next>(
     state: State<Storage, T, S>,
-    _token: <Storage::Machine as StateMachineImpl>::TransitionToken,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
 ) -> StateTransitionCall<Storage, T, S, Next>
 where
     T: StateMachineImpl,
-    Storage: StateStorage<T>,
+    Storage: StateStorage,
     T::Standin: Transition<S, Next>,
     S: crate::StateTrait,
     Next: crate::StateTrait,
@@ -374,13 +372,13 @@ where
 impl<Storage, T, S> State<Storage, T, S>
 where
     T: StateMachineImpl,
-    Storage: StateStorageNew<T>,
+    Storage: StateStorageNew,
 {
     /// Wraps an implementation in a state declared initial by its definition.
     #[must_use]
     pub fn new(value: T) -> Self
     where
-        <Storage::Machine as StateMachineImpl>::Standin: Initial<S>,
+        <Storage::Machine<T> as StateMachineImpl>::Standin: Initial<S>,
     {
         Self {
             inner: Storage::new(value),
@@ -392,9 +390,9 @@ where
 impl<Storage, T, S> State<Storage, T, S>
 where
     T: StateMachineImpl,
-    Storage: StateStorage<T>,
+    Storage: StateStorage,
 {
-    pub(crate) fn from_inner(inner: Storage::Inner<S>) -> Self {
+    pub(crate) fn from_inner(inner: Storage::Inner<T, S>) -> Self {
         Self {
             inner,
             marker: PhantomData,
@@ -405,37 +403,42 @@ where
 impl<Storage, T, S> Deref for State<Storage, T, S>
 where
     T: StateMachineImpl,
-    Storage: StateStorageDeref<T>,
+    Storage: SRef,
 {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        Storage::deref(&self.inner)
+        Storage::s_ref(&self.inner)
     }
 }
 
 impl<Storage, T, S> DerefMut for State<Storage, T, S>
 where
     T: StateMachineImpl,
-    Storage: StateStorageDerefMut<T>,
+    Storage: SMut,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        Storage::deref_mut(&mut self.inner)
+        Storage::s_mut(&mut self.inner)
     }
 }
 
-impl<T> StateStorage<T> for StorageStateOwned
-where
-    T: StateMachineImpl,
-{
-    type Inner<S> = StateOwned<T, S>;
-    type Machine = T;
-    fn complete_transition<From, To, Args>(
+impl StateStorage for StorageStateOwned {
+    type Inner<T, S>
+        = StateOwned<T, S>
+    where
+        T: StateMachineImpl;
+    type Machine<T>
+        = T
+    where
+        T: StateMachineImpl;
+
+    fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         _args: Args,
         callsite: TransitionCallsite,
     ) -> State<Self, T, To>
     where
+        T: StateMachineImpl,
         From: crate::StateTrait,
         To: crate::StateTrait,
         T::Standin: Transition<From, To>,
@@ -449,103 +452,117 @@ where
     }
 }
 
-impl<T> StateStorageNew<T> for StorageStateOwned
-where
-    T: StateMachineImpl,
-{
-    fn new<State>(value: T) -> Self::Inner<State>
+impl StateStorageNew for StorageStateOwned {
+    fn new<T, S>(value: T) -> Self::Inner<T, S>
     where
-        T::Standin: Initial<State>,
+        T: StateMachineImpl,
+        T::Standin: Initial<S>,
     {
         StateOwned::new(value)
     }
 }
 
-impl<T> StateStorageDeref<T> for StorageStateOwned
-where
-    T: StateMachineImpl,
-{
-    fn deref<State>(inner: &Self::Inner<State>) -> &T {
-        inner
-    }
-}
-
-impl<T> StateStorageDerefMut<T> for StorageStateOwned
-where
-    T: StateMachineImpl,
-{
-    fn deref_mut<State>(inner: &mut Self::Inner<State>) -> &mut T {
-        inner
-    }
-}
-
-impl<T> StateStorage<T> for StorageStateOwnedBox
-where
-    T: StateMachineImpl,
-{
-    type Inner<S> = StateOwned<Box<T>, S>;
-    type Machine = Box<T>;
-    fn complete_transition<From, To, Args>(
-        state: State<Self, T, From>,
-        _args: Args,
-        callsite: TransitionCallsite,
-    ) -> State<Self, T, To>
+impl SRef for StorageStateOwned {
+    fn s_ref<T, S>(inner: &Self::Inner<T, S>) -> &T
     where
-        From: crate::StateTrait,
-        To: crate::StateTrait,
-        T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple,
+        T: StateMachineImpl,
     {
-        State {
-            inner: complete_owned_transition(state.inner, callsite),
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T> StateStorageNew<T> for StorageStateOwnedBox
-where
-    T: StateMachineImpl,
-{
-    fn new<State>(value: T) -> Self::Inner<State>
-    where
-        <Box<T> as StateMachineImpl>::Standin: Initial<State>,
-    {
-        StateOwned::new(Box::new(value))
-    }
-}
-
-impl<T> StateStorageDeref<T> for StorageStateOwnedBox
-where
-    T: StateMachineImpl,
-{
-    fn deref<State>(inner: &Self::Inner<State>) -> &T {
         &inner.value
     }
 }
 
-impl<T> StateStorageDerefMut<T> for StorageStateOwnedBox
-where
-    T: StateMachineImpl,
-{
-    fn deref_mut<State>(inner: &mut Self::Inner<State>) -> &mut T {
+impl SMut for StorageStateOwned {
+    fn s_mut<T, S>(inner: &mut Self::Inner<T, S>) -> &mut T
+    where
+        T: StateMachineImpl,
+    {
         &mut inner.value
     }
 }
 
-impl<T> StateStorage<T> for StorageStateOwnedPinBox
-where
-    T: StateMachineImpl,
-{
-    type Inner<S> = StateOwned<Pin<Box<T>>, S>;
-    type Machine = Pin<Box<T>>;
-    fn complete_transition<From, To, Args>(
+macro_rules! indirect_owned_storage {
+    ($storage:ty, $wrapper:ident) => {
+        impl StateStorage for $storage {
+            type Inner<T, S>
+                = StateOwned<$wrapper<T>, S>
+            where
+                T: StateMachineImpl;
+            type Machine<T>
+                = $wrapper<T>
+            where
+                T: StateMachineImpl;
+
+            fn complete_transition<T, From, To, Args>(
+                state: State<Self, T, From>,
+                _args: Args,
+                callsite: TransitionCallsite,
+            ) -> State<Self, T, To>
+            where
+                T: StateMachineImpl,
+                From: crate::StateTrait,
+                To: crate::StateTrait,
+                T::Standin: Transition<From, To>,
+                <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
+                Args: core::marker::Tuple,
+            {
+                State {
+                    inner: complete_owned_transition(state.inner, callsite),
+                    marker: PhantomData,
+                }
+            }
+        }
+
+        impl StateStorageNew for $storage {
+            fn new<T, S>(value: T) -> Self::Inner<T, S>
+            where
+                T: StateMachineImpl,
+                <Self::Machine<T> as StateMachineImpl>::Standin: Initial<S>,
+            {
+                StateOwned::new($wrapper::new(value))
+            }
+        }
+
+        impl SRef for $storage {
+            fn s_ref<T, S>(inner: &Self::Inner<T, S>) -> &T
+            where
+                T: StateMachineImpl,
+            {
+                &inner.value
+            }
+        }
+
+        impl SMut for $storage {
+            fn s_mut<T, S>(inner: &mut Self::Inner<T, S>) -> &mut T
+            where
+                T: StateMachineImpl,
+            {
+                &mut inner.value
+            }
+        }
+    };
+}
+
+indirect_owned_storage!(StorageStateOwnedBox, Box);
+indirect_owned_storage!(StorageStateOwnedUniqueRc, UniqueRc);
+indirect_owned_storage!(StorageStateOwnedUniqueArc, UniqueArc);
+
+impl StateStorage for StorageStateOwnedPinBox {
+    type Inner<T, S>
+        = StateOwned<Pin<Box<T>>, S>
+    where
+        T: StateMachineImpl;
+    type Machine<T>
+        = Pin<Box<T>>
+    where
+        T: StateMachineImpl;
+
+    fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         _args: Args,
         callsite: TransitionCallsite,
     ) -> State<Self, T, To>
     where
+        T: StateMachineImpl,
         From: crate::StateTrait,
         To: crate::StateTrait,
         T::Standin: Transition<From, To>,
@@ -559,113 +576,22 @@ where
     }
 }
 
-impl<T> StateStorageNew<T> for StorageStateOwnedPinBox
-where
-    T: StateMachineImpl,
-{
-    fn new<State>(value: T) -> Self::Inner<State>
+impl StateStorageNew for StorageStateOwnedPinBox {
+    fn new<T, S>(value: T) -> Self::Inner<T, S>
     where
-        <Pin<Box<T>> as StateMachineImpl>::Standin: Initial<State>,
+        T: StateMachineImpl,
+        <Self::Machine<T> as StateMachineImpl>::Standin: Initial<S>,
     {
         StateOwned::new(Box::pin(value))
     }
 }
 
-impl<T> StateStorageDeref<T> for StorageStateOwnedPinBox
-where
-    T: StateMachineImpl,
-{
-    fn deref<State>(inner: &Self::Inner<State>) -> &T {
+impl SRef for StorageStateOwnedPinBox {
+    fn s_ref<T, S>(inner: &Self::Inner<T, S>) -> &T
+    where
+        T: StateMachineImpl,
+    {
         &inner.value
-    }
-}
-
-impl<T> StateStorageDerefMut<T> for StorageStateOwnedPinBox
-where
-    T: StateMachineImpl + Unpin,
-{
-    fn deref_mut<State>(inner: &mut Self::Inner<State>) -> &mut T {
-        Pin::get_mut(inner.value.as_mut())
-    }
-}
-
-impl<T> StateStorage<T> for StorageStateOwnedUniqueRc
-where
-    T: StateMachineImpl,
-{
-    type Inner<S> = StateOwned<UniqueRc<T>, S>;
-    type Machine = UniqueRc<T>;
-    fn complete_transition<From, To, Args>(
-        state: State<Self, T, From>,
-        _args: Args,
-        callsite: TransitionCallsite,
-    ) -> State<Self, T, To>
-    where
-        From: crate::StateTrait,
-        To: crate::StateTrait,
-        T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple,
-    {
-        State {
-            inner: complete_owned_transition(state.inner, callsite),
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T> StateStorageNew<T> for StorageStateOwnedUniqueRc
-where
-    T: StateMachineImpl,
-{
-    fn new<State>(value: T) -> Self::Inner<State>
-    where
-        <UniqueRc<T> as StateMachineImpl>::Standin: Initial<State>,
-    {
-        StateOwned::new(UniqueRc::new(value))
-    }
-}
-
-impl<T> StateStorageDeref<T> for StorageStateOwnedUniqueRc
-where
-    T: StateMachineImpl,
-{
-    fn deref<State>(inner: &Self::Inner<State>) -> &T {
-        &inner.value
-    }
-}
-
-impl<T> StateStorageDerefMut<T> for StorageStateOwnedUniqueRc
-where
-    T: StateMachineImpl,
-{
-    fn deref_mut<State>(inner: &mut Self::Inner<State>) -> &mut T {
-        &mut inner.value
-    }
-}
-
-impl<T> StateStorage<T> for StorageStateOwnedUniqueArc
-where
-    T: StateMachineImpl,
-{
-    type Inner<S> = StateOwned<UniqueArc<T>, S>;
-    type Machine = UniqueArc<T>;
-    fn complete_transition<From, To, Args>(
-        state: State<Self, T, From>,
-        _args: Args,
-        callsite: TransitionCallsite,
-    ) -> State<Self, T, To>
-    where
-        From: crate::StateTrait,
-        To: crate::StateTrait,
-        T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple,
-    {
-        State {
-            inner: complete_owned_transition(state.inner, callsite),
-            marker: PhantomData,
-        }
     }
 }
 
@@ -696,35 +622,5 @@ where
         value: state.value,
         state: PhantomData,
         trace,
-    }
-}
-
-impl<T> StateStorageNew<T> for StorageStateOwnedUniqueArc
-where
-    T: StateMachineImpl,
-{
-    fn new<State>(value: T) -> Self::Inner<State>
-    where
-        <UniqueArc<T> as StateMachineImpl>::Standin: Initial<State>,
-    {
-        StateOwned::new(UniqueArc::new(value))
-    }
-}
-
-impl<T> StateStorageDeref<T> for StorageStateOwnedUniqueArc
-where
-    T: StateMachineImpl,
-{
-    fn deref<State>(inner: &Self::Inner<State>) -> &T {
-        &inner.value
-    }
-}
-
-impl<T> StateStorageDerefMut<T> for StorageStateOwnedUniqueArc
-where
-    T: StateMachineImpl,
-{
-    fn deref_mut<State>(inner: &mut Self::Inner<State>) -> &mut T {
-        &mut inner.value
     }
 }

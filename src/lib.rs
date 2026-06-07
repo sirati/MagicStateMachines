@@ -34,10 +34,10 @@ pub use shared::{
     StateRef, StorageStateMut, transition_mut,
 };
 pub use state::{
-    State, StateOwned, StateOwnedBox, StateOwnedPin, StateOwnedPinBox, StateStorage,
-    StateStorageDeref, StateStorageDerefMut, StateStorageNew, StateTransitionCall,
-    StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
-    StorageStateOwnedUniqueRc, TransitionCall, TransitionCallsite, transition, transition_state,
+    SMut, SRef, State, StateOwned, StateOwnedBox, StateOwnedPin, StateOwnedPinBox, StateStorage,
+    StateStorageNew, StateTransitionCall, StorageStateOwned, StorageStateOwnedBox,
+    StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, TransitionCall,
+    TransitionCallsite, transition, transition_state,
 };
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]
@@ -72,7 +72,7 @@ macro_rules! StateUnion {
 ///         self: State<Storage, Self, Disconnected>,
 ///     ) -> State<Storage, Self, Connected>
 ///     where
-///         Storage: StateStorageDeref<Self>,
+///         Storage: SRef,
 ///     {
 ///         self.transition()()
 ///     }
@@ -121,8 +121,8 @@ macro_rules! StateMachineImpl {
         trait __GenericStateTransitionExt<Storage, T, From>
         where
             T: $crate::StateMachineImpl,
-            Storage: $crate::StateStorage<T>,
-            Storage::Machine: $crate::StateMachineImpl,
+            Storage: $crate::StateStorage,
+            Storage::Machine<T>: $crate::StateMachineImpl,
         {
             #[must_use]
             #[track_caller]
@@ -137,8 +137,8 @@ macro_rules! StateMachineImpl {
             for $crate::State<Storage, T, From>
         where
             T: $crate::StateMachineImpl,
-            Storage: $crate::StateStorage<T>,
-            Storage::Machine: $crate::StateMachineImpl<
+            Storage: $crate::StateStorage,
+            Storage::Machine<T>: $crate::StateMachineImpl<
                     Standin = $standin,
                     Impl = $implementation,
                     TransitionToken = __StateMachineTransitionToken,

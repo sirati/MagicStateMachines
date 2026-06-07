@@ -1,6 +1,6 @@
 use crate::{
-    Initial, State, StateMachineImpl, StateStorage, StateStorageDeref, StateStorageDerefMut,
-    StateTrait, Transition, TransitionCallsite,
+    Initial, SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait, Transition,
+    TransitionCallsite,
     state_trait::{self, ErasedState},
 };
 use core::fmt;
@@ -182,8 +182,7 @@ pub type RcState<S, T> = SharedState<Rc<<S as SharedStorage>::Storage<T>>, S, T>
 pub type ArcState<S, T> = SharedState<Arc<<S as SharedStorage>::Storage<T>>, S, T>;
 pub type RefCellState<T> = RcState<RefCellStorage, T>;
 pub type MutexState<T> = ArcState<MutexStorage, T>;
-pub type StateMutView<'a, Backend, T, S> =
-    State<StorageStateMut<<Backend as SharedStorage>::WriteGuard<'a, T>>, T, S>;
+pub type StateMutView<'a, Backend, T, S> = State<StorageStateMut<'a, Backend>, T, S>;
 
 pub struct StateRef<G, T, S> {
     guard: G,
@@ -225,21 +224,28 @@ where
 }
 
 /// Generic [`State`] backend for a mutable shared-state guard.
-pub struct StorageStateMut<G>(PhantomData<fn() -> G>);
+pub struct StorageStateMut<'a, Backend>(PhantomData<&'a Backend>);
 
-impl<G, T> StateStorage<T> for StorageStateMut<G>
+impl<'a, Backend> StateStorage for StorageStateMut<'a, Backend>
 where
-    G: DerefMut<Target = SharedValue<T>>,
-    T: StateMachineImpl,
+    Backend: SharedStorage + 'a,
 {
-    type Inner<S> = StateMut<G, T, S>;
-    type Machine = T;
-    fn complete_transition<From, To, Args>(
+    type Inner<T, S>
+        = StateMut<Backend::WriteGuard<'a, T>, T, S>
+    where
+        T: StateMachineImpl;
+    type Machine<T>
+        = T
+    where
+        T: StateMachineImpl;
+
+    fn complete_transition<T, From, To, Args>(
         mut state: State<Self, T, From>,
         _args: Args,
         _callsite: TransitionCallsite,
     ) -> State<Self, T, To>
     where
+        T: StateMachineImpl,
         From: StateTrait,
         To: StateTrait,
         T::Standin: Transition<From, To>,
@@ -257,22 +263,26 @@ where
     }
 }
 
-impl<G, T> StateStorageDeref<T> for StorageStateMut<G>
+impl<'a, Backend> SRef for StorageStateMut<'a, Backend>
 where
-    G: DerefMut<Target = SharedValue<T>>,
-    T: StateMachineImpl,
+    Backend: SharedStorage + 'a,
 {
-    fn deref<State>(inner: &Self::Inner<State>) -> &T {
+    fn s_ref<T, S>(inner: &Self::Inner<T, S>) -> &T
+    where
+        T: StateMachineImpl,
+    {
         inner
     }
 }
 
-impl<G, T> StateStorageDerefMut<T> for StorageStateMut<G>
+impl<'a, Backend> SMut for StorageStateMut<'a, Backend>
 where
-    G: DerefMut<Target = SharedValue<T>>,
-    T: StateMachineImpl,
+    Backend: SharedStorage + 'a,
 {
-    fn deref_mut<State>(inner: &mut Self::Inner<State>) -> &mut T {
+    fn s_mut<T, S>(inner: &mut Self::Inner<T, S>) -> &mut T
+    where
+        T: StateMachineImpl,
+    {
         inner
     }
 }

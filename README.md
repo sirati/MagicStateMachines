@@ -99,7 +99,7 @@ fn connect<Storage>(
     self: State<Storage, Self, Disconnected>,
 ) -> State<Storage, Self, Connected>
 where
-    Storage: StateStorageDeref<Self>,
+    Storage: SRef,
 {
     self.transition()()
 }
