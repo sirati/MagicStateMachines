@@ -1,4 +1,4 @@
-use statemachines::{SMut, SRef, SResult, State, StorageStateOwned};
+use statemachines::{SMut, SOwned, SRef, SResult, State};
 use test_def::{
     ConnectionStandin, Online, OnlineEnum,
     states::{Authenticated, Connected, Disconnected},
@@ -22,9 +22,7 @@ impl Connection {
     }
 
     #[must_use]
-    pub(crate) fn disconnected(
-        endpoint: impl Into<String>,
-    ) -> State<StorageStateOwned, Self, Disconnected> {
+    pub(crate) fn disconnected(endpoint: impl Into<String>) -> State<SOwned, Self, Disconnected> {
         State::new(Self::new(endpoint))
     }
 
@@ -97,24 +95,17 @@ impl Connection {
         self.user = None;
         self.transition()()
     }
-    
-    // #[must_use]
-    // pub(crate) fn disconnect<S>(mut self: State<S, Self, impl Online>) -> State<S, Self, Disconnected>
-    // where
-    //     S: SMut,
-    // {
-    //     self.user = None;
-    //     let self_ = self.as_online_enum();
-    //     self_.transition()()
-    // }
-    
+
     #[must_use]
-    pub(crate) fn disconnect<S>(mut self: State<S, Self, Connected>) -> State<S, Self, Disconnected>
+    pub(crate) fn disconnect<S>(
+        mut self: State<S, Self, impl Online>,
+    ) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
         self.user = None;
-        self.transition()()
+        let self_ = <_ as Online>::into_joint(self);
+        self_.transition()()
     }
 
     #[must_use]

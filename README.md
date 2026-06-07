@@ -74,8 +74,8 @@ The project uses nightly Rust because arbitrary self types are unstable:
 
 ```rust
 pub fn connect(
-    self: State<StorageStateOwned, Self, states::Disconnected>,
-) -> State<StorageStateOwned, Self, states::Connected> {
+    self: State<SOwned, Self, states::Disconnected>,
+) -> State<SOwned, Self, states::Connected> {
     self.transition()()
 }
 ```
@@ -168,6 +168,9 @@ where
     self.transition()()
 }
 ```
+
+`SRef`, `SMut`, and `SMove` are storage capability traits. `SOwned` is the
+short alias for the directly owned storage backend.
 
 Shared receivers such as `Rc<T>`, `Arc<T>`, and `&T` are deliberately not
 supported as state storage: they could alias one runtime value with

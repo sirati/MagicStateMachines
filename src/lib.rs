@@ -36,10 +36,10 @@ pub use shared::{
     StateRef, StorageStateMut, transition_mut,
 };
 pub use state::{
-    SMut, SRef, SResult, State, StateOwned, StateOwnedBox, StateOwnedPin, StateOwnedPinBox,
-    StateStorage, StateStorageNew, StateTransitionCall, StorageStateOwned, StorageStateOwnedBox,
-    StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, TransitionCall,
-    TransitionCallsite, transition, transition_state,
+    SMove, SMut, SOwned, SRef, SResult, State, StateOwned, StateOwnedBox, StateOwnedPin,
+    StateOwnedPinBox, StateStorage, StateStorageNew, StateTransitionCall, StorageStateOwned,
+    StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
+    StorageStateOwnedUniqueRc, TransitionCall, TransitionCallsite, transition, transition_state,
 };
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]

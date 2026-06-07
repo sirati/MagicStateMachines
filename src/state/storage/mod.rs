@@ -7,8 +7,8 @@ use core::ops::{Deref, DerefMut};
 use core::panic::Location;
 
 pub use owned::{
-    StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
-    StorageStateOwnedUniqueRc,
+    SOwned, StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox,
+    StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc,
 };
 
 fn retag_owned<T, From, To>(inner: crate::StateOwned<T, From>) -> crate::StateOwned<T, To> {
@@ -88,6 +88,9 @@ pub trait SMut: SRef {
     where
         T: StateMachineImpl;
 }
+
+/// Storage backend whose state token can be consumed by value.
+pub trait SMove: StateStorage {}
 
 /// A state token parameterized by its storage backend.
 pub struct State<Storage, T, S>

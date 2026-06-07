@@ -32,4 +32,14 @@ mod tests {
 
         assert_eq!(online.endpoint(), "localhost:8081");
     }
+
+    #[test]
+    fn anonymous_online_state_disconnects_through_joint_transition() {
+        let disconnected = Connection::disconnected("localhost:8082")
+            .connect()
+            .authenticate("alice")
+            .disconnect();
+
+        assert_eq!(disconnected.raw_endpoint(), "localhost:8082");
+    }
 }

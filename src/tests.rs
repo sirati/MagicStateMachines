@@ -1,6 +1,6 @@
 use crate::{
-    Initial, MutexState, RefCellState, SharedStateError, State, StateCopy, StateMachineImpl,
-    StateOwned, StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox,
+    Initial, MutexState, RefCellState, SMove, SOwned, SharedStateError, State, StateCopy,
+    StateMachineImpl, StateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox,
     StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, Transition, transition,
     transition_state,
 };
@@ -63,8 +63,15 @@ fn declared_transition_changes_only_the_type() {
 
 #[test]
 fn generic_state_preserves_storage_across_transitions() {
-    let ready = State::<StorageStateOwned, _, Ready>::new(Runtime);
-    let _: State<StorageStateOwned, Runtime, Running> = transition_state(ready, TransitionToken)();
+    fn assert_move_storage<S: SMove>() {}
+    assert_move_storage::<SOwned>();
+    assert_move_storage::<StorageStateOwnedBox>();
+    assert_move_storage::<StorageStateOwnedPinBox>();
+    assert_move_storage::<StorageStateOwnedUniqueRc>();
+    assert_move_storage::<StorageStateOwnedUniqueArc>();
+
+    let ready = State::<SOwned, _, Ready>::new(Runtime);
+    let _: State<SOwned, Runtime, Running> = transition_state(ready, TransitionToken)();
 
     let ready = State::<StorageStateOwnedBox, _, Ready>::new(Runtime);
     let _: State<StorageStateOwnedBox, Runtime, Running> =

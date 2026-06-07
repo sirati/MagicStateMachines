@@ -1,4 +1,4 @@
-use super::{SMut, SRef, State, StateStorage, StateStorageNew, TransitionCallsite};
+use super::{SMove, SMut, SRef, State, StateStorage, StateStorageNew, TransitionCallsite};
 use crate::state::owned::{StateOwned, complete_transition};
 use crate::{Initial, StateMachineImpl, Transition};
 use core::marker::PhantomData;
@@ -8,6 +8,8 @@ use std::sync::UniqueArc;
 
 /// Backend for directly owned values.
 pub struct StorageStateOwned;
+
+pub type SOwned = StorageStateOwned;
 
 /// Backend for `Box<T>` owned values.
 pub struct StorageStateOwnedBox;
@@ -86,6 +88,8 @@ impl SMut for StorageStateOwned {
     }
 }
 
+impl SMove for StorageStateOwned {}
+
 macro_rules! indirect_owned_storage {
     ($storage:ty, $wrapper:ident) => {
         impl StateStorage for $storage {
@@ -152,6 +156,8 @@ macro_rules! indirect_owned_storage {
                 &mut inner.value
             }
         }
+
+        impl SMove for $storage {}
     };
 }
 
@@ -214,3 +220,5 @@ impl SRef for StorageStateOwnedPinBox {
         &inner.value
     }
 }
+
+impl SMove for StorageStateOwnedPinBox {}
