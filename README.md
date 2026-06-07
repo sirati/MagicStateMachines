@@ -107,7 +107,20 @@ Each union has a generated joint ZST state. `OnlineEnum<Storage, T>` preserves
 the concrete variant while every variant exposes the same
 `State<Storage, T, JointOnlineState>` view. Concrete states convert into the
 enum with `Into`, and matching variants recover their concrete state with
-`into_state()`.
+`into_state()`. For enum-producing unions, the union trait also provides
+`into_enum`, which works even when the concrete state is hidden behind
+`impl Online`:
+
+```rust
+fn as_online_enum<S>(
+    self: State<S, Self, impl Online>,
+) -> OnlineEnum<S, Self>
+where
+    S: SRef,
+{
+    <_ as Online>::into_enum(self)
+}
+```
 
 Functions with one success and one failure state can use the shorter result
 alias:

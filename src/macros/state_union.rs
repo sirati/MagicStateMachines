@@ -46,13 +46,13 @@ macro_rules! StateUnion {
         $name:ident:
         $first:ident $(| $state:ident)* $(,)?
     ) => {
-        $crate::__StateUnion!(@trait $name []: $first $(| $state)*);
+        $crate::__StateUnion!(@trait $name [] []: $first $(| $state)*);
     };
     (
         $name:ident, enum $enum_name:ident:
         $first:ident $(| $state:ident)* $(,)?
     ) => {
-        $crate::__StateUnion!(@trait $name []: $first $(| $state)*);
+        $crate::__StateUnion!(@trait $name [] [enum $enum_name]: $first $(| $state)*);
         $crate::__private::paste! {
             $crate::__StateUnion!(
                 @enum $enum_name [<__state_union_marker_ $name:snake>]:
@@ -66,7 +66,7 @@ macro_rules! StateUnion {
         $first:ident $(| $state:ident)* $(,)?
     ) => {
         $crate::__StateUnion!(
-            @trait $name [$first_super $(, $supertrait)*]:
+            @trait $name [$first_super $(, $supertrait)*] []:
             $first $(| $state)*
         );
     };
@@ -77,7 +77,7 @@ macro_rules! StateUnion {
         $first:ident $(| $state:ident)* $(,)?
     ) => {
         $crate::__StateUnion!(
-            @trait $name [$first_super $(, $supertrait)*]:
+            @trait $name [$first_super $(, $supertrait)*] [enum $enum_name]:
             $first $(| $state)*
         );
         $crate::__private::paste! {

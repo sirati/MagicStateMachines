@@ -78,6 +78,14 @@ impl Connection {
     }
 
     #[must_use]
+    pub(crate) fn as_online_enum<S>(self: State<S, Self, impl Online>) -> OnlineEnum<S, Self>
+    where
+        S: SRef,
+    {
+        <_ as Online>::into_enum(self)
+    }
+
+    #[must_use]
     pub(crate) fn disconnect_online<S, Current>(
         mut self: State<S, Self, Current>,
     ) -> State<S, Self, Disconnected>
@@ -89,7 +97,17 @@ impl Connection {
         self.user = None;
         self.transition()()
     }
-
+    
+    // #[must_use]
+    // pub(crate) fn disconnect<S>(mut self: State<S, Self, impl Online>) -> State<S, Self, Disconnected>
+    // where
+    //     S: SMut,
+    // {
+    //     self.user = None;
+    //     let self_ = self.as_online_enum();
+    //     self_.transition()()
+    // }
+    
     #[must_use]
     pub(crate) fn disconnect<S>(mut self: State<S, Self, Connected>) -> State<S, Self, Disconnected>
     where

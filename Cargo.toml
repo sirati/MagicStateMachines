@@ -29,3 +29,4 @@ paste = "1.0.15"
 
 [lib]
 path = "src/lib.rs"
+

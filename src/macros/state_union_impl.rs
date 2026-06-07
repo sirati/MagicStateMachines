@@ -2,7 +2,7 @@
 #[macro_export]
 macro_rules! __StateUnion {
     (
-        @trait $name:ident [$first_super:ident $(, $supertrait:ident)*]:
+        @trait $name:ident [$first_super:ident $(, $supertrait:ident)*] $enum:tt:
         $first:ident $(| $state:ident)*
     ) => {
         $crate::__private::paste! {
@@ -34,22 +34,30 @@ macro_rules! __StateUnion {
                 [<__state_union_seal_ $name:snake>]::Sealed
                 + $first_super
                 $(+ $supertrait)*
-            {}
+            {
+                $crate::__StateUnion!(@into_enum_method $enum);
+            }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed
                 for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
             {}
-            impl $name for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]> {}
+            impl $name for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]> {
+                $crate::__StateUnion!(@into_enum_joint_impl $enum);
+            }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed for $first {}
-            impl $name for $first {}
+            impl $name for $first {
+                $crate::__StateUnion!(@into_enum_impl $enum $first);
+            }
             impl $crate::StateUnionMember<$first>
                 for [<__state_union_marker_ $name:snake>]
             {}
 
             $(
                 impl [<__state_union_seal_ $name:snake>]::Sealed for $state {}
-                impl $name for $state {}
+                impl $name for $state {
+                    $crate::__StateUnion!(@into_enum_impl $enum $state);
+                }
                 impl $crate::StateUnionMember<$state>
                     for [<__state_union_marker_ $name:snake>]
                 {}
@@ -72,7 +80,7 @@ macro_rules! __StateUnion {
         }
     };
     (
-        @trait $name:ident []:
+        @trait $name:ident [] $enum:tt:
         $first:ident $(| $state:ident)*
     ) => {
         $crate::__private::paste! {
@@ -85,22 +93,30 @@ macro_rules! __StateUnion {
                 pub trait Sealed {}
             }
 
-            pub trait $name: [<__state_union_seal_ $name:snake>]::Sealed {}
+            pub trait $name: [<__state_union_seal_ $name:snake>]::Sealed {
+                $crate::__StateUnion!(@into_enum_method $enum);
+            }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed
                 for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
             {}
-            impl $name for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]> {}
+            impl $name for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]> {
+                $crate::__StateUnion!(@into_enum_joint_impl $enum);
+            }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed for $first {}
-            impl $name for $first {}
+            impl $name for $first {
+                $crate::__StateUnion!(@into_enum_impl $enum $first);
+            }
             impl $crate::StateUnionMember<$first>
                 for [<__state_union_marker_ $name:snake>]
             {}
 
             $(
                 impl [<__state_union_seal_ $name:snake>]::Sealed for $state {}
-                impl $name for $state {}
+                impl $name for $state {
+                    $crate::__StateUnion!(@into_enum_impl $enum $state);
+                }
                 impl $crate::StateUnionMember<$state>
                     for [<__state_union_marker_ $name:snake>]
                 {}
@@ -161,6 +177,37 @@ macro_rules! __StateUnion {
             );
         }
     };
+    (@into_enum_method [enum $enum_name:ident]) => {
+        #[must_use]
+        fn into_enum<Storage, T>(state: $crate::State<Storage, T, Self>) -> $enum_name<Storage, T>
+        where
+            Self: Sized,
+            Storage: $crate::StateStorage,
+            T: $crate::StateMachineImpl;
+    };
+    (@into_enum_method []) => {};
+    (@into_enum_impl [enum $enum_name:ident] $state:ident) => {
+        fn into_enum<Storage, T>(state: $crate::State<Storage, T, Self>) -> $enum_name<Storage, T>
+        where
+            Self: Sized,
+            Storage: $crate::StateStorage,
+            T: $crate::StateMachineImpl,
+        {
+            $enum_name::$state($crate::StateUnionVariant::new(state))
+        }
+    };
+    (@into_enum_impl [] $state:ident) => {};
+    (@into_enum_joint_impl [enum $enum_name:ident]) => {
+        fn into_enum<Storage, T>(_state: $crate::State<Storage, T, Self>) -> $enum_name<Storage, T>
+        where
+            Self: Sized,
+            Storage: $crate::StateStorage,
+            T: $crate::StateMachineImpl,
+        {
+            panic!("a joint union state cannot be converted into a concrete union enum variant")
+        }
+    };
+    (@into_enum_joint_impl []) => {};
     (
         @enum $enum_name:ident $marker:ident:
         $first:ident $(| $state:ident)*

@@ -8,6 +8,10 @@ pub(crate) fn run() {
         Ok(connection) => connection,
         Err(_) => return,
     };
+    let connection = match connection.as_online_enum() {
+        OnlineEnum::Connected(connection) => connection.into_state(),
+        OnlineEnum::Authenticated(_) => return,
+    };
     let online = connection.authenticate_if(Some("alice".into()));
     println!("{} is online", online.endpoint());
 
