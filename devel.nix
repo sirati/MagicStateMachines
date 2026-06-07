@@ -30,6 +30,7 @@ in
         packages = [
           rustToolchain
           pkgs.cargo-nextest
+          pkgs.cargo-expand
           pkgs.rust-analyzer
         ];
 

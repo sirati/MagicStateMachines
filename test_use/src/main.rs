@@ -34,7 +34,7 @@ mod tests {
     }
 
     #[test]
-    fn anonymous_online_state_disconnects_through_joint_transition() {
+    fn anonymous_online_state_disconnects_through_erased_transition() {
         let disconnected = Connection::disconnected("localhost:8082")
             .connect()
             .authenticate("alice")

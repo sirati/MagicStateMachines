@@ -32,15 +32,15 @@ impl Transition<Authenticated, Connected> for ConnectionStandin {}
 impl Transition<Authenticated, Disconnected> for ConnectionStandin {}
 
 StateUnion!(AllMarker: Disconnected | Connected | Authenticated);
-StateUnion!(Online: AllMarker, enum OnlineEnum: Connected | Authenticated);
+StateUnion!(Online: AllMarker, Connected | Authenticated);
 
-// Trait unions can inherit one or more previously defined union traits.
-StateUnion!(OnlineMarker: AllMarker, Connected | Authenticated);
-StateUnion!(DisconnectedMarker: AllMarker, Disconnected);
-StateUnion!(
-    All2Marker: AllMarker + OnlineMarker,
-    Connected | Authenticated
-);
+// // Trait unions can inherit one or more previously defined union traits.
+// StateUnion!(OnlineMarker: AllMarker, Connected | Authenticated);
+// StateUnion!(DisconnectedMarker: AllMarker, Disconnected);
+// StateUnion!(
+//     All2Marker: AllMarker + OnlineMarker,
+//     Connected | Authenticated
+// );
 
-// The enum-only form remains independent of marker traits.
-StateUnion!(enum OnlineValue: Connected | Authenticated);
+// // The enum-only form remains independent of marker traits.
+// StateUnion!(enum OnlineValue: Connected | Authenticated);

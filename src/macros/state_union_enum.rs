@@ -40,37 +40,51 @@ macro_rules! __StateUnionEnum {
             );
         }
     };
-    (@into_enum_method [enum $enum_name:ident]) => {
-        #[must_use]
-        fn into_enum<Storage, T>(state: $crate::State<Storage, T, Self>) -> $enum_name<Storage, T>
-        where
-            Self: Sized,
-            Storage: $crate::StateStorage,
-            T: $crate::StateMachineImpl;
-    };
-    (@into_enum_method []) => {};
-    (@into_enum_impl [enum $enum_name:ident] $state:ident) => {
-        fn into_enum<Storage, T>(state: $crate::State<Storage, T, Self>) -> $enum_name<Storage, T>
-        where
-            Self: Sized,
-            Storage: $crate::StateStorage,
-            T: $crate::StateMachineImpl,
-        {
-            $enum_name::$state($crate::StateUnionVariant::new(state))
+    (
+        @conversion_trait $name:ident $enum_name:ident:
+        $first:ident $(| $state:ident)*
+    ) => {
+        $crate::__private::paste! {
+            pub trait [<$name IntoEnum>]: $name + $crate::StateUnionConcreteState {
+                #[must_use]
+                fn into_enum<Storage, T>(
+                    state: $crate::State<Storage, T, Self>,
+                ) -> $enum_name<Storage, T>
+                where
+                    Self: Sized,
+                    Storage: $crate::StateStorage,
+                    T: $crate::StateMachineImpl;
+            }
+
+            impl [<$name IntoEnum>] for $first {
+                fn into_enum<Storage, T>(
+                    state: $crate::State<Storage, T, Self>,
+                ) -> $enum_name<Storage, T>
+                where
+                    Self: Sized,
+                    Storage: $crate::StateStorage,
+                    T: $crate::StateMachineImpl,
+                {
+                    $enum_name::$first($crate::StateUnionVariant::new(state))
+                }
+            }
+
+            $(
+                impl [<$name IntoEnum>] for $state {
+                    fn into_enum<Storage, T>(
+                        state: $crate::State<Storage, T, Self>,
+                    ) -> $enum_name<Storage, T>
+                    where
+                        Self: Sized,
+                        Storage: $crate::StateStorage,
+                        T: $crate::StateMachineImpl,
+                    {
+                        $enum_name::$state($crate::StateUnionVariant::new(state))
+                    }
+                }
+            )*
         }
     };
-    (@into_enum_impl [] $state:ident) => {};
-    (@into_enum_joint_impl [enum $enum_name:ident]) => {
-        fn into_enum<Storage, T>(_state: $crate::State<Storage, T, Self>) -> $enum_name<Storage, T>
-        where
-            Self: Sized,
-            Storage: $crate::StateStorage,
-            T: $crate::StateMachineImpl,
-        {
-            panic!("a joint union state cannot be converted into a concrete union enum variant")
-        }
-    };
-    (@into_enum_joint_impl []) => {};
     (
         @enum $enum_name:ident $marker:ident:
         $first:ident $(| $state:ident)*
@@ -109,13 +123,13 @@ macro_rules! __StateUnionEnum {
             T: $crate::StateMachineImpl,
         {
             #[must_use]
-            pub fn into_joint(
+            pub fn into_erased(
                 self,
             ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>> {
                 match self {
-                    Self::$first(state) => state.into_joint(),
+                    Self::$first(state) => state.into_erased(),
                     $(
-                        Self::$state(state) => state.into_joint(),
+                        Self::$state(state) => state.into_erased(),
                     )*
                 }
             }

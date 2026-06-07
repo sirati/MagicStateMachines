@@ -4,13 +4,13 @@
     auto_traits,
     fn_traits,
     generic_const_exprs,
+    negative_impls,
     random,
     tuple_trait,
     unboxed_closures,
     unique_rc_arc
 )]
 #![allow(incomplete_features)]
-#![cfg_attr(test, feature(negative_impls))]
 #![deny(unsafe_code)]
 
 //! Zero-overhead wrappers for externally defined typestate contracts.
@@ -44,6 +44,8 @@ pub use state::{
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]
 pub use tracing::TraceEntry;
+#[doc(hidden)]
+pub use union::StateUnionConcreteState;
 #[doc(hidden)]
 pub use union::{StateUnionMember, StateUnionState, StateUnionTransition, StateUnionVariant};
 

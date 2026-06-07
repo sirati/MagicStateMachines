@@ -34,7 +34,7 @@ pub(crate) fn run() {
     let online = Connection::disconnected("localhost:8081")
         .connect()
         .authenticate_if(None);
-    let _disconnected = online.into_joint().disconnect_online();
+    let _disconnected = online.into_erased().disconnect_online();
 
     let boxed: State<StorageStateOwnedBox, Connection, Disconnected> =
         State::new(Connection::new("localhost:9090"));

@@ -21,7 +21,7 @@ macro_rules! __StateUnion {
             impl $first_super
                 for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
             {
-                $crate::__StateUnion!(@into_joint_variant_impl [<__state_union_marker_ $first_super:snake>]);
+                $crate::__StateUnion!(@into_erased_variant_impl [<__state_union_marker_ $first_super:snake>]);
             }
             impl $crate::StateUnionMember<
                 $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
@@ -33,7 +33,7 @@ macro_rules! __StateUnion {
                 impl $supertrait
                     for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
                 {
-                    $crate::__StateUnion!(@into_joint_variant_impl [<__state_union_marker_ $supertrait:snake>]);
+                    $crate::__StateUnion!(@into_erased_variant_impl [<__state_union_marker_ $supertrait:snake>]);
                 }
                 impl $crate::StateUnionMember<
                     $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
@@ -45,22 +45,19 @@ macro_rules! __StateUnion {
                 + $first_super
                 $(+ $supertrait)*
             {
-                $crate::__StateUnion!(@into_joint_method [<__state_union_marker_ $name:snake>]);
-                $crate::__StateUnion!(@into_enum_method $enum);
+                $crate::__StateUnion!(@into_erased_method [<__state_union_marker_ $name:snake>]);
             }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed
                 for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
             {}
             impl $name for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]> {
-                $crate::__StateUnion!(@into_joint_identity_impl [<__state_union_marker_ $name:snake>]);
-                $crate::__StateUnion!(@into_enum_joint_impl $enum);
+                $crate::__StateUnion!(@into_erased_identity_impl [<__state_union_marker_ $name:snake>]);
             }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed for $first {}
             impl $name for $first {
-                $crate::__StateUnion!(@into_joint_variant_impl [<__state_union_marker_ $name:snake>]);
-                $crate::__StateUnion!(@into_enum_impl $enum $first);
+                $crate::__StateUnion!(@into_erased_variant_impl [<__state_union_marker_ $name:snake>]);
             }
             impl $crate::StateUnionMember<$first>
                 for [<__state_union_marker_ $name:snake>]
@@ -69,8 +66,7 @@ macro_rules! __StateUnion {
             $(
                 impl [<__state_union_seal_ $name:snake>]::Sealed for $state {}
                 impl $name for $state {
-                    $crate::__StateUnion!(@into_joint_variant_impl [<__state_union_marker_ $name:snake>]);
-                    $crate::__StateUnion!(@into_enum_impl $enum $state);
+                    $crate::__StateUnion!(@into_erased_variant_impl [<__state_union_marker_ $name:snake>]);
                 }
                 impl $crate::StateUnionMember<$state>
                     for [<__state_union_marker_ $name:snake>]
@@ -91,6 +87,11 @@ macro_rules! __StateUnion {
             {
                 type F = <Standin as $crate::Transition<$first, To>>::F;
             }
+
+            $crate::__StateUnion!(
+                @maybe_conversion_trait $enum $name:
+                $first $(| $state)*
+            );
         }
     };
     (
@@ -108,22 +109,19 @@ macro_rules! __StateUnion {
             }
 
             pub trait $name: [<__state_union_seal_ $name:snake>]::Sealed {
-                $crate::__StateUnion!(@into_joint_method [<__state_union_marker_ $name:snake>]);
-                $crate::__StateUnion!(@into_enum_method $enum);
+                $crate::__StateUnion!(@into_erased_method [<__state_union_marker_ $name:snake>]);
             }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed
                 for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]>
             {}
             impl $name for $crate::StateUnionState<[<__state_union_marker_ $name:snake>]> {
-                $crate::__StateUnion!(@into_joint_identity_impl [<__state_union_marker_ $name:snake>]);
-                $crate::__StateUnion!(@into_enum_joint_impl $enum);
+                $crate::__StateUnion!(@into_erased_identity_impl [<__state_union_marker_ $name:snake>]);
             }
 
             impl [<__state_union_seal_ $name:snake>]::Sealed for $first {}
             impl $name for $first {
-                $crate::__StateUnion!(@into_joint_variant_impl [<__state_union_marker_ $name:snake>]);
-                $crate::__StateUnion!(@into_enum_impl $enum $first);
+                $crate::__StateUnion!(@into_erased_variant_impl [<__state_union_marker_ $name:snake>]);
             }
             impl $crate::StateUnionMember<$first>
                 for [<__state_union_marker_ $name:snake>]
@@ -132,8 +130,7 @@ macro_rules! __StateUnion {
             $(
                 impl [<__state_union_seal_ $name:snake>]::Sealed for $state {}
                 impl $name for $state {
-                    $crate::__StateUnion!(@into_joint_variant_impl [<__state_union_marker_ $name:snake>]);
-                    $crate::__StateUnion!(@into_enum_impl $enum $state);
+                    $crate::__StateUnion!(@into_erased_variant_impl [<__state_union_marker_ $name:snake>]);
                 }
                 impl $crate::StateUnionMember<$state>
                     for [<__state_union_marker_ $name:snake>]
@@ -154,6 +151,11 @@ macro_rules! __StateUnion {
             {
                 type F = <Standin as $crate::Transition<$first, To>>::F;
             }
+
+            $crate::__StateUnion!(
+                @maybe_conversion_trait $enum $name:
+                $first $(| $state)*
+            );
         }
     };
     (
@@ -162,9 +164,9 @@ macro_rules! __StateUnion {
     ) => {
         $crate::__StateUnionEnum!(@standalone_enum $enum_name: $first $(| $state)*);
     };
-    (@into_joint_method $marker:ident) => {
+    (@into_erased_method $marker:ident) => {
         #[must_use]
-        fn into_joint<Storage, T>(
+        fn into_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
         where
@@ -172,8 +174,8 @@ macro_rules! __StateUnion {
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl;
     };
-    (@into_joint_identity_impl $marker:ident) => {
-        fn into_joint<Storage, T>(
+    (@into_erased_identity_impl $marker:ident) => {
+        fn into_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
         where
@@ -184,8 +186,8 @@ macro_rules! __StateUnion {
             state
         }
     };
-    (@into_joint_variant_impl $marker:ident) => {
-        fn into_joint<Storage, T>(
+    (@into_erased_variant_impl $marker:ident) => {
+        fn into_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
         where
@@ -193,18 +195,22 @@ macro_rules! __StateUnion {
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            $crate::StateUnionVariant::<Storage, T, Self, $marker>::new(state).into_joint()
+            $crate::StateUnionVariant::<Storage, T, Self, $marker>::new(state).into_erased()
         }
     };
-    (@into_enum_method $enum:tt) => {
-        $crate::__StateUnionEnum!(@into_enum_method $enum);
+    (
+        @maybe_conversion_trait [enum $enum_name:ident] $name:ident:
+        $first:ident $(| $state:ident)*
+    ) => {
+        $crate::__StateUnionEnum!(
+            @conversion_trait $name $enum_name:
+            $first $(| $state)*
+        );
     };
-    (@into_enum_impl $enum:tt $state:ident) => {
-        $crate::__StateUnionEnum!(@into_enum_impl $enum $state);
-    };
-    (@into_enum_joint_impl $enum:tt) => {
-        $crate::__StateUnionEnum!(@into_enum_joint_impl $enum);
-    };
+    (
+        @maybe_conversion_trait [] $name:ident:
+        $first:ident $(| $state:ident)*
+    ) => {};
     (
         @enum $enum_name:ident $marker:ident:
         $first:ident $(| $state:ident)*

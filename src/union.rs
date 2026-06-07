@@ -6,6 +6,12 @@ use core::ops::Deref;
 #[doc(hidden)]
 pub struct StateUnionState<Marker>(PhantomData<fn() -> Marker>);
 
+/// Implemented by concrete states that can still identify their enum variant.
+#[doc(hidden)]
+pub auto trait StateUnionConcreteState {}
+
+impl<Marker> !StateUnionConcreteState for StateUnionState<Marker> {}
+
 /// Records that `State` belongs to a generated state union.
 #[doc(hidden)]
 pub trait StateUnionMember<State> {}
@@ -54,7 +60,7 @@ where
     }
 
     #[must_use]
-    pub fn into_joint(self) -> State<Storage, T, StateUnionState<Marker>> {
+    pub fn into_erased(self) -> State<Storage, T, StateUnionState<Marker>> {
         self.state
     }
 }
