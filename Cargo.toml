@@ -1,0 +1,26 @@
+[package]
+name = "statemachines"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Zero-overhead typestate wrappers for compiler-enforced state machines"
+
+[features]
+default = []
+tracing = []
+
+[workspace]
+members = ["test_def", "test_use"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+
+[workspace.dependencies]
+statemachines = { path = "." }
+test_def = { path = "test_def" }
+
+[lib]
+path = "src/lib.rs"
