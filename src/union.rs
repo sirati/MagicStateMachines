@@ -1,4 +1,7 @@
-use crate::{State, StateMachineImpl, StateStorage, StateTrait, Transition};
+use crate::{
+    State, StateMachineImpl, StateStorage, StateTrait, Transition, TransitionEffect,
+    TransitionEffectSelector,
+};
 use core::marker::PhantomData;
 use core::ops::Deref;
 
@@ -29,11 +32,48 @@ pub trait StateUnionTransition<Standin, To> {
     type F;
 }
 
+/// Resolves implementation-side effects supported by every union member.
+#[doc(hidden)]
+pub trait StateUnionTransitionEffect<T, To>
+where
+    T: StateMachineImpl,
+{
+    type Effect;
+}
+
+/// Applies the shared implementation-side effect for a union transition.
+#[doc(hidden)]
+pub trait StateUnionTransitionEffectApply<T, To, Args>: StateUnionTransitionEffect<T, To>
+where
+    T: StateMachineImpl,
+{
+    fn apply(value: &mut T, args: Args);
+}
+
 impl<Standin, Marker, To> Transition<StateUnionState<Marker>, To> for Standin
 where
     Marker: StateUnionTransition<Standin, To>,
 {
     type F = Marker::F;
+}
+
+impl<T, Marker, To> TransitionEffectSelector<StateUnionState<Marker>, To> for T
+where
+    T: StateMachineImpl,
+    Marker: StateUnionTransitionEffect<T, To>,
+{
+    type Effect = Marker::Effect;
+}
+
+impl<T, Marker, To, Args, Effect> TransitionEffect<T, StateUnionState<Marker>, To, Args> for Effect
+where
+    T: StateMachineImpl,
+    Marker: StateUnionTransitionEffect<T, To, Effect = Effect>
+        + StateUnionTransitionEffectApply<T, To, Args>,
+{
+    fn apply(value: &mut T, args: Args) {
+        Marker::apply(value, args);
+    }
 }
 
 /// A union variant that preserves its concrete state while exposing the joint state.

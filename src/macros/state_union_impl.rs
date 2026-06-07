@@ -43,7 +43,8 @@ macro_rules! __StateUnion {
 
             #[allow(dead_code)]
             pub trait [<In $marker>]:
-                [<__state_union_seal_ $marker:snake>]::Sealed
+                $crate::StateTrait
+                + [<__state_union_seal_ $marker:snake>]::Sealed
                 + [<In $first_super>]
                 $(+ [<In $supertrait>])*
             {
@@ -90,6 +91,11 @@ macro_rules! __StateUnion {
                 type F = <Standin as $crate::Transition<$first, To>>::F;
             }
 
+            $crate::__StateUnion!(
+                @transition_effect $marker:
+                $first $(| $state)*
+            );
+
             impl $crate::StateUnionRuntime for $marker {
                 fn contains(state: &dyn $crate::StateTrait) -> bool {
                     state.type_id() == ::core::any::TypeId::of::<$first>()
@@ -127,7 +133,9 @@ macro_rules! __StateUnion {
             }
 
             #[allow(dead_code)]
-            pub trait [<In $marker>]: [<__state_union_seal_ $marker:snake>]::Sealed {
+            pub trait [<In $marker>]:
+                $crate::StateTrait + [<__state_union_seal_ $marker:snake>]::Sealed
+            {
                 $crate::__StateUnion!(@into_erased_method $marker);
             }
 
@@ -171,6 +179,11 @@ macro_rules! __StateUnion {
                 type F = <Standin as $crate::Transition<$first, To>>::F;
             }
 
+            $crate::__StateUnion!(
+                @transition_effect $marker:
+                $first $(| $state)*
+            );
+
             impl $crate::StateUnionRuntime for $marker {
                 fn contains(state: &dyn $crate::StateTrait) -> bool {
                     state.type_id() == ::core::any::TypeId::of::<$first>()
@@ -197,6 +210,48 @@ macro_rules! __StateUnion {
         $first:ident $(| $state:ident)*
     ) => {
         $crate::__StateUnionEnum!(@standalone_enum $enum_name: $first $(| $state)*);
+    };
+    (
+        @transition_effect $marker:ident:
+        $first:ident $(| $state:ident)*
+    ) => {
+        impl<T, To> $crate::StateUnionTransitionEffect<T, To> for $marker
+        where
+            T: $crate::StateMachineImpl
+                + $crate::TransitionEffectSelector<$first, To>,
+            $(
+                T: $crate::TransitionEffectSelector<
+                    $state,
+                    To,
+                    Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
+                >,
+            )*
+        {
+            type Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect;
+        }
+
+        impl<T, To, Args> $crate::StateUnionTransitionEffectApply<T, To, Args>
+            for $marker
+        where
+            T: $crate::StateMachineImpl
+                + $crate::TransitionEffectSelector<$first, To>,
+            <T as $crate::TransitionEffectSelector<$first, To>>::Effect:
+                $crate::TransitionEffect<T, $first, To, Args>,
+            $(
+                T: $crate::TransitionEffectSelector<
+                    $state,
+                    To,
+                    Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
+                >,
+                <T as $crate::TransitionEffectSelector<$first, To>>::Effect:
+                    $crate::TransitionEffect<T, $state, To, Args>,
+            )*
+        {
+            fn apply(value: &mut T, args: Args) {
+                <<T as $crate::TransitionEffectSelector<$first, To>>::Effect as
+                    $crate::TransitionEffect<T, $first, To, Args>>::apply(value, args);
+            }
+        }
     };
     (@into_erased_method $marker:ident) => {
         #[must_use]

@@ -11,7 +11,27 @@ pub(crate) struct Connection {
     user: Option<String>,
 }
 
-statemachines::StateMachineImpl!(Connection: ConnectionStandin);
+statemachines::StateMachineImpl! {
+    Connection: ConnectionStandin;
+
+    transition Disconnected => Connected();
+
+    transition Connected => Authenticated(user: String) {
+        self.user = Some(user);
+    }
+
+    transition Connected => Disconnected() {
+        self.user = None;
+    }
+
+    transition Authenticated => Disconnected() {
+        self.user = None;
+    }
+
+    transition Authenticated => Connected() {
+        self.user = None;
+    }
+}
 
 impl Connection {
     pub(crate) fn new(endpoint: impl Into<String>) -> Self {
@@ -29,7 +49,7 @@ impl Connection {
     #[must_use]
     pub(crate) fn connect<S>(self: State<S, Self, Disconnected>) -> State<S, Self, Connected>
     where
-        S: SRef,
+        S: SMut,
     {
         self.transition()()
     }
@@ -39,7 +59,7 @@ impl Connection {
         available: bool,
     ) -> SResult<S, Self, Connected, Disconnected>
     where
-        S: SRef,
+        S: SMut,
     {
         if available {
             Ok(self.connect())
@@ -50,15 +70,13 @@ impl Connection {
 
     #[must_use]
     pub(crate) fn authenticate<S>(
-        mut self: State<S, Self, Connected>,
+        self: State<S, Self, Connected>,
         user: impl Into<String>,
     ) -> State<S, Self, Authenticated>
     where
         S: SMut,
     {
-        let user = user.into();
-        self.user = Some(user.clone());
-        self.transition()(user)
+        self.transition()(user.into())
     }
 
     #[must_use]
@@ -87,34 +105,29 @@ impl Connection {
 
     #[must_use]
     pub(crate) fn disconnect_online<S, Current>(
-        mut self: State<S, Self, Current>,
+        self: State<S, Self, Current>,
     ) -> State<S, Self, Disconnected>
     where
         S: SMut,
-        Current: InOnline + statemachines::StateTrait,
+        Current: InOnline,
         ConnectionStandin: statemachines::Transition<Current, Disconnected, F = fn()>,
     {
-        self.user = None;
-        self.transition()()
-    }
-
-    #[must_use]
-    pub(crate) fn disconnect<S>(
-        mut self: State<S, Self, impl InOnline>,
-    ) -> State<S, Self, Disconnected>
-    where
-        S: SMut,
-    {
-        self.user = None;
         <_ as InOnline>::into_erased(self).transition()()
     }
 
     #[must_use]
-    pub(crate) fn logout<S>(mut self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
+    pub(crate) fn disconnect<S>(self: State<S, Self, impl InOnline>) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
-        self.user = None;
+        <_ as InOnline>::into_erased(self).transition()()
+    }
+
+    #[must_use]
+    pub(crate) fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
+    where
+        S: SMut,
+    {
         self.transition()()
     }
 

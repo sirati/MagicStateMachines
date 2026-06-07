@@ -58,6 +58,21 @@ impl StateStorage for StorageStateOwned {
             marker: PhantomData,
         }
     }
+
+    fn complete_transition_after_effect<T, From, To>(
+        state: State<Self, T, From>,
+        callsite: TransitionCallsite,
+    ) -> State<Self, T, To>
+    where
+        T: StateMachineImpl,
+        From: crate::StateTrait,
+        To: crate::StateTrait,
+    {
+        State {
+            inner: complete_transition(state.inner, callsite),
+            marker: PhantomData,
+        }
+    }
 }
 
 impl StateStorageNew for StorageStateOwned {
@@ -121,6 +136,21 @@ macro_rules! indirect_owned_storage {
                 T::Standin: Transition<From, To>,
                 <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
                 Args: core::marker::Tuple,
+            {
+                State {
+                    inner: complete_transition(state.inner, callsite),
+                    marker: PhantomData,
+                }
+            }
+
+            fn complete_transition_after_effect<T, From, To>(
+                state: State<Self, T, From>,
+                callsite: TransitionCallsite,
+            ) -> State<Self, T, To>
+            where
+                T: StateMachineImpl,
+                From: crate::StateTrait,
+                To: crate::StateTrait,
             {
                 State {
                     inner: complete_transition(state.inner, callsite),
@@ -194,6 +224,21 @@ impl StateStorage for StorageStateOwnedPinBox {
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple,
+    {
+        State {
+            inner: complete_transition(state.inner, callsite),
+            marker: PhantomData,
+        }
+    }
+
+    fn complete_transition_after_effect<T, From, To>(
+        state: State<Self, T, From>,
+        callsite: TransitionCallsite,
+    ) -> State<Self, T, To>
+    where
+        T: StateMachineImpl,
+        From: crate::StateTrait,
+        To: crate::StateTrait,
     {
         State {
             inner: complete_transition(state.inner, callsite),

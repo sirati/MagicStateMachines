@@ -95,6 +95,25 @@ where
             marker: PhantomData,
         }
     }
+
+    fn complete_transition_after_effect<T, From, To>(
+        mut state: State<Self, T, From>,
+        _callsite: TransitionCallsite,
+    ) -> State<Self, T, To>
+    where
+        T: StateMachineImpl,
+        From: StateTrait,
+        To: StateTrait,
+    {
+        State {
+            inner: StateMut {
+                guard: state.inner.guard.take(),
+                pending: state_trait::erased_state::<To>(),
+                marker: PhantomData,
+            },
+            marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, Backend> SRef for StorageStateMut<'a, Backend>

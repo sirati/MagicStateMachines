@@ -23,6 +23,21 @@ fn retag_owned<T, From, To>(inner: crate::StateOwned<T, From>) -> crate::StateOw
 type StateMarker<Storage, T, S> = PhantomData<fn() -> (Storage, T, S)>;
 type TransitionMarker<Storage, T, From, To> = PhantomData<fn() -> (Storage, T, From, To)>;
 
+/// Selects the implementation-side effect for a declared transition.
+#[doc(hidden)]
+pub trait TransitionEffectSelector<From, To>: StateMachineImpl {
+    type Effect;
+}
+
+/// Applies implementation-side transition effects before the state is retagged.
+#[doc(hidden)]
+pub trait TransitionEffect<T, From, To, Args>
+where
+    T: StateMachineImpl,
+{
+    fn apply(value: &mut T, args: Args);
+}
+
 /// Storage backend used by [`State`].
 pub trait StateStorage: Sized {
     /// Concrete state representation used by this storage backend.
@@ -52,6 +67,16 @@ pub trait StateStorage: Sized {
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple;
+
+    #[doc(hidden)]
+    fn complete_transition_after_effect<T, From, To>(
+        state: State<Self, T, From>,
+        callsite: TransitionCallsite,
+    ) -> State<Self, T, To>
+    where
+        T: StateMachineImpl,
+        From: crate::StateTrait,
+        To: crate::StateTrait;
 }
 
 pub(crate) fn retag_state<Storage, T, From, To>(
@@ -65,6 +90,20 @@ where
         inner: Storage::retag(state.inner),
         marker: PhantomData,
     }
+}
+
+#[doc(hidden)]
+pub fn complete_transition_after_effect<Storage, T, From, To>(
+    state: State<Storage, T, From>,
+    callsite: TransitionCallsite,
+) -> State<Storage, T, To>
+where
+    Storage: StateStorage,
+    T: StateMachineImpl,
+    From: crate::StateTrait,
+    To: crate::StateTrait,
+{
+    Storage::complete_transition_after_effect(state, callsite)
 }
 
 /// Storage backend that can create initial owned state.
@@ -122,11 +161,34 @@ where
     marker: TransitionMarker<Storage, T, From, To>,
 }
 
+/// A callable transition that first routes through implementation-owned effects.
+#[doc(hidden)]
+pub struct EffectTransitionCall<Storage, T, From, To, Effect>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+{
+    state: State<Storage, T, From>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> (To, Effect)>,
+}
+
 #[cfg(feature = "tracing")]
 pub type TransitionCallsite = &'static Location<'static>;
 
 #[cfg(not(feature = "tracing"))]
 pub type TransitionCallsite = ();
+
+#[doc(hidden)]
+#[track_caller]
+pub fn transition_callsite() -> TransitionCallsite {
+    #[cfg(feature = "tracing")]
+    {
+        Location::caller()
+    }
+    #[cfg(not(feature = "tracing"))]
+    {}
+}
 
 impl<Storage, T, From, To, Args> FnOnce<Args> for StateTransitionCall<Storage, T, From, To>
 where
@@ -152,6 +214,26 @@ where
     }
 }
 
+impl<Storage, T, From, To, Args, Effect> FnOnce<Args>
+    for EffectTransitionCall<Storage, T, From, To, Effect>
+where
+    T: StateMachineImpl,
+    Storage: SMut,
+    T::Standin: Transition<From, To>,
+    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
+    Args: core::marker::Tuple,
+    From: crate::StateTrait,
+    To: crate::StateTrait,
+    Effect: TransitionEffect<T, From, To, Args>,
+{
+    type Output = State<Storage, T, To>;
+
+    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+        Effect::apply(Storage::s_mut(&mut self.state.inner), args);
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
 /// Creates a callable transition for generic state storage.
 #[must_use]
 #[track_caller]
@@ -170,6 +252,28 @@ where
         state,
         #[cfg(feature = "tracing")]
         callsite: Location::caller(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable transition that runs implementation-side effects first.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_effect<Storage, T, S, Next, Effect>(
+    state: State<Storage, T, S>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> EffectTransitionCall<Storage, T, S, Next, Effect>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    T::Standin: Transition<S, Next>,
+    S: crate::StateTrait,
+    Next: crate::StateTrait,
+{
+    EffectTransitionCall {
+        state,
+        callsite: transition_callsite(),
         marker: PhantomData,
     }
 }

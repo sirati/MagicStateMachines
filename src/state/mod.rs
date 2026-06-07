@@ -6,7 +6,9 @@ pub use owned::{
 };
 pub(crate) use storage::retag_state;
 pub use storage::{
-    SMove, SMut, SOwned, SRef, SResult, State, StateStorage, StateStorageNew, StateTransitionCall,
-    StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
-    StorageStateOwnedUniqueRc, TransitionCallsite, transition_state,
+    EffectTransitionCall, SMove, SMut, SOwned, SRef, SResult, State, StateStorage, StateStorageNew,
+    StateTransitionCall, StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox,
+    StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, TransitionCallsite, TransitionEffect,
+    TransitionEffectSelector, complete_transition_after_effect, transition_callsite,
+    transition_state, transition_state_with_effect,
 };

@@ -284,3 +284,75 @@ fn cloning_state_clones_erased_markers() {
     assert!(cloned.trace()[0].from().type_name().ends_with("::Ready"));
     assert!(cloned.trace()[0].to().type_name().ends_with("::Running"));
 }
+
+mod transition_effect_syntax {
+    use crate::{Initial, SOwned, State, Transition};
+
+    struct Machine;
+    pub struct Ready;
+    pub struct Connected;
+    pub struct Authenticated;
+
+    struct Runtime {
+        value: u32,
+    }
+
+    impl Initial<Ready> for Machine {}
+    impl Transition<Ready, Connected> for Machine {}
+    impl Transition<Connected, Authenticated> for Machine {}
+    impl Transition<Connected, Ready> for Machine {}
+    impl Transition<Authenticated, Ready> for Machine {}
+    impl Transition<Authenticated, Connected> for Machine {}
+
+    crate::StateUnion!(Online: Connected | Authenticated);
+
+    crate::StateMachineImpl! {
+        Runtime: Machine;
+
+        transition Ready => Connected();
+
+        transition Connected => Authenticated() {
+            self.value += 1;
+        }
+
+        transition Connected | Authenticated => Ready(),
+        transition Authenticated => Connected() {
+            self.value += 10;
+        }
+    }
+
+    #[test]
+    fn semicolon_transition_has_empty_body() {
+        let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
+        let connected = ready.transition()();
+        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+
+        assert_eq!(authenticated.value, 1);
+    }
+
+    #[test]
+    fn comma_terminated_transition_shares_next_body() {
+        let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
+        let connected = ready.transition()();
+        let ready: State<SOwned, _, Ready> = connected.transition()();
+
+        assert_eq!(ready.value, 10);
+
+        let connected = ready.transition()();
+        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+        let ready: State<SOwned, _, Ready> = authenticated.transition()();
+
+        assert_eq!(ready.value, 21);
+    }
+
+    #[test]
+    fn erased_union_transition_runs_shared_body() {
+        let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
+        let connected = ready.transition()();
+        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+        let online = <Authenticated as InOnline>::into_erased(authenticated);
+        let ready: State<SOwned, _, Ready> = online.transition()();
+
+        assert_eq!(ready.value, 11);
+    }
+}

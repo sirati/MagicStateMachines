@@ -18,6 +18,77 @@
 /// ```
 #[macro_export]
 macro_rules! StateMachineImpl {
+    (
+        $implementation:ty : $standin:ty;
+        $($transitions:tt)*
+    ) => {
+        #[doc(hidden)]
+        pub struct __StateMachineTransitionToken(());
+
+        impl $crate::StateMachineImpl for $implementation {
+            type Standin = $standin;
+            type Impl = $implementation;
+            type TransitionToken = __StateMachineTransitionToken;
+        }
+
+        $crate::__StateMachineImpl!(
+            @parse $implementation; $standin; [];
+            $($transitions)*
+        );
+
+        #[allow(dead_code)]
+        trait __GenericStateTransitionExt<Storage, From>
+        where
+            Storage: $crate::StateStorage,
+        {
+            #[must_use]
+            #[track_caller]
+            fn transition<To>(
+                self,
+            ) -> $crate::EffectTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                To,
+                <$implementation as $crate::TransitionEffectSelector<From, To>>::Effect,
+            >
+            where
+                From: $crate::StateTrait,
+                To: $crate::StateTrait,
+                $standin: $crate::Transition<From, To>,
+                $implementation: $crate::TransitionEffectSelector<From, To>;
+        }
+
+        impl<Storage, From> __GenericStateTransitionExt<Storage, From>
+            for $crate::State<Storage, $implementation, From>
+        where
+            Storage: $crate::StateStorage,
+            Storage::Machine<$implementation>: $crate::StateMachineImpl<
+                    Standin = $standin,
+                    Impl = $implementation,
+                    TransitionToken = __StateMachineTransitionToken,
+                >,
+        {
+            #[track_caller]
+            fn transition<To>(
+                self,
+            ) -> $crate::EffectTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                To,
+                <$implementation as $crate::TransitionEffectSelector<From, To>>::Effect,
+            >
+            where
+                From: $crate::StateTrait,
+                To: $crate::StateTrait,
+                $standin: $crate::Transition<From, To>,
+                $implementation: $crate::TransitionEffectSelector<From, To>,
+            {
+                $crate::transition_state_with_effect(self, __StateMachineTransitionToken(()))
+            }
+        }
+    };
     ($implementation:ty : $standin:ty $(,)?) => {
         #[doc(hidden)]
         pub struct __StateMachineTransitionToken(());
@@ -120,5 +191,149 @@ macro_rules! StateMachineImpl {
                 $crate::transition_mut(self, __StateMachineTransitionToken(()))
             }
         }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __StateMachineImpl {
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+    ) => {
+        $crate::__StateMachineImpl!(@finish_pending [$($pending)*]);
+    };
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+        transition $first_from:ident $(| $from:ident)* => $to:ident
+            ($($arg:ident : $arg_ty:ty),* $(,)?),
+        $($rest:tt)*
+    ) => {
+        $crate::__StateMachineImpl!(
+            @parse $implementation; $standin;
+            [
+                $($pending)*
+                { $first_from $(| $from)* => $to ($($arg : $arg_ty),*) }
+            ];
+            $($rest)*
+        );
+    };
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+        transition $first_from:ident $(| $from:ident)* => $to:ident
+            ($($arg:ident : $arg_ty:ty),* $(,)?);
+        $($rest:tt)*
+    ) => {
+        $crate::__StateMachineImpl!(@emit_pending $implementation; $standin; {}; $($pending)*);
+        $crate::__StateMachineImpl!(
+            @effect_impls $implementation; $standin; $first_from $(| $from)* => $to
+            ($($arg : $arg_ty),*) {}
+        );
+        $crate::__StateMachineImpl!(@parse $implementation; $standin; []; $($rest)*);
+    };
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+        transition $first_from:ident $(| $from:ident)* => $to:ident
+            ($($arg:ident : $arg_ty:ty),* $(,)?) { $($body:tt)* },
+        $($rest:tt)*
+    ) => {
+        $crate::__StateMachineImpl!(@emit_pending $implementation; $standin; { $($body)* }; $($pending)*);
+        $crate::__StateMachineImpl!(
+            @effect_impls $implementation; $standin; $first_from $(| $from)* => $to
+            ($($arg : $arg_ty),*) { $($body)* }
+        );
+        $crate::__StateMachineImpl!(@parse $implementation; $standin; []; $($rest)*);
+    };
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+        transition $first_from:ident $(| $from:ident)* => $to:ident
+            ($($arg:ident : $arg_ty:ty),* $(,)?) { $($body:tt)* }
+        $($rest:tt)*
+    ) => {
+        $crate::__StateMachineImpl!(@emit_pending $implementation; $standin; { $($body)* }; $($pending)*);
+        $crate::__StateMachineImpl!(
+            @effect_impls $implementation; $standin; $first_from $(| $from)* => $to
+            ($($arg : $arg_ty),*) { $($body)* }
+        );
+        $crate::__StateMachineImpl!(@parse $implementation; $standin; []; $($rest)*);
+    };
+    (@finish_pending []) => {};
+    (@finish_pending [$($pending:tt)+]) => {
+        ::core::compile_error!(
+            "comma-terminated state-machine transitions must be followed by a transition body or semicolon"
+        );
+    };
+    (
+        @emit_pending $implementation:ty; $standin:ty; { $($body:tt)* };
+    ) => {};
+    (
+        @emit_pending $implementation:ty; $standin:ty; { $($body:tt)* };
+        { $first_from:ident $(| $from:ident)* => $to:ident ($($arg:ident : $arg_ty:ty),*) }
+        $($rest:tt)*
+    ) => {
+        $crate::__StateMachineImpl!(
+            @effect_impls $implementation; $standin; $first_from $(| $from)* => $to
+            ($($arg : $arg_ty),*) { $($body)* }
+        );
+        $crate::__StateMachineImpl!(
+            @emit_pending $implementation; $standin; { $($body)* };
+            $($rest)*
+        );
+    };
+    (
+        @effect_impls $implementation:ty; $standin:ty; $first_from:ident $(| $from:ident)* => $to:ident
+        $args:tt $body:tt
+    ) => {
+        $crate::__private::paste! {
+            #[doc(hidden)]
+            pub struct [<__StateMachineTransitionEffect $first_from To $to>];
+        }
+
+        $crate::__StateMachineImpl!(
+            @effect_impl $implementation; $standin; $first_from $first_from => $to
+            $args $body
+        );
+        $(
+            $crate::__StateMachineImpl!(
+                @effect_impl $implementation; $standin; $from $first_from => $to
+                $args $body
+            );
+        )*
+    };
+    (
+        @effect_impl $implementation:ty; $standin:ty; $from:ident $effect_from:ident => $to:ident
+        ($($arg:ident : $arg_ty:ty),*) { $($body:tt)* }
+    ) => {
+        $crate::__private::paste! {
+            impl $crate::TransitionEffectSelector<$from, $to> for $implementation {
+                type Effect = [<__StateMachineTransitionEffect $effect_from To $to>];
+            }
+
+            impl $crate::TransitionEffect<$implementation, $from, $to, ($($arg_ty,)*)>
+                for [<__StateMachineTransitionEffect $effect_from To $to>]
+            where
+                $standin: $crate::Transition<$from, $to, F = fn($($arg_ty),*)>,
+            {
+                fn apply(
+                    __state_machine_value: &mut $implementation,
+                    ($($arg,)*): ($($arg_ty,)*),
+                ) {
+                    let __state_machine_self = __state_machine_value;
+                    $crate::__StateMachineImpl!(@replace_self __state_machine_self; []; $($body)*);
+                }
+            }
+        }
+    };
+    (@replace_self $self_ident:ident; [$($out:tt)*];) => {
+        $($out)*
+    };
+    (@replace_self $self_ident:ident; [$($out:tt)*]; self $($rest:tt)*) => {
+        $crate::__StateMachineImpl!(
+            @replace_self $self_ident; [$($out)* $self_ident]; $($rest)*
+        )
+    };
+    (@replace_self $self_ident:ident; [$($out:tt)*]; $token:tt $($rest:tt)*) => {
+        $crate::__StateMachineImpl!(
+            @replace_self $self_ident; [$($out)* $token]; $($rest)*
+        )
     };
 }

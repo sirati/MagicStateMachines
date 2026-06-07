@@ -36,10 +36,12 @@ pub use shared::{
     StateMutView, StateRef, StorageStateMut, transition_mut,
 };
 pub use state::{
-    SMove, SMut, SOwned, SRef, SResult, State, StateOwned, StateOwnedBox, StateOwnedPin,
-    StateOwnedPinBox, StateStorage, StateStorageNew, StateTransitionCall, StorageStateOwned,
-    StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
-    StorageStateOwnedUniqueRc, TransitionCall, TransitionCallsite, transition, transition_state,
+    EffectTransitionCall, SMove, SMut, SOwned, SRef, SResult, State, StateOwned, StateOwnedBox,
+    StateOwnedPin, StateOwnedPinBox, StateStorage, StateStorageNew, StateTransitionCall,
+    StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
+    StorageStateOwnedUniqueRc, TransitionCall, TransitionCallsite, TransitionEffect,
+    TransitionEffectSelector, complete_transition_after_effect, transition, transition_callsite,
+    transition_state, transition_state_with_effect,
 };
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]
@@ -48,7 +50,8 @@ pub use tracing::TraceEntry;
 pub use union::StateUnionConcreteState;
 #[doc(hidden)]
 pub use union::{
-    StateUnionMember, StateUnionRuntime, StateUnionState, StateUnionTransition, StateUnionVariant,
+    StateUnionMember, StateUnionRuntime, StateUnionState, StateUnionTransition,
+    StateUnionTransitionEffect, StateUnionTransitionEffectApply, StateUnionVariant,
 };
 
 #[doc(hidden)]
