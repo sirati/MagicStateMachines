@@ -19,8 +19,12 @@ license = "MIT OR Apache-2.0"
 version = "0.1.0"
 
 [workspace.dependencies]
+dynzst = { git = "https://github.com/sirati/DynZSTBox.rs", rev = "0d982f22e063f43000b99fc6f98d0819d5441044" }
 statemachines = { path = "." }
 test_def = { path = "test_def" }
+
+[dependencies]
+dynzst.workspace = true
 
 [lib]
 path = "src/lib.rs"

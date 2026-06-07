@@ -6,7 +6,7 @@ in separate crates.
 
 The workspace contains:
 
-- `statemachines`: the reusable `State<T, S>` wrapper
+- `statemachines`: the reusable `State<Storage, T, S>` wrapper
 - `test_def`: only the stand-in ZST, states, allowed transitions, and unions
 - `test_use`: the runtime type and all method implementations
 
@@ -35,12 +35,22 @@ impl Transition<Connected, Authenticated> for ConnectionStandin {
     type F = fn(String);
 }
 
-let authenticated = connected.transition::<Authenticated>()("alice".into());
+let authenticated =
+    connected.authenticate("alice");
 ```
 
-The associated type defaults to `fn()`. `transition()` returns a one-shot
-callable whose `FnOnce` implementation uses the `rust-call` ABI, giving normal
-function-call syntax and compiler-enforced parameters.
+The associated type defaults to `fn()`. The implementation macro generates the
+private transition capability and module-local `transition()` helpers:
+
+```rust
+statemachines::StateMachineImpl!(Connection: ConnectionStandin);
+```
+
+Those helpers return a one-shot callable whose `FnOnce` implementation uses the
+`rust-call` ABI. The underlying public `statemachines::transition` and
+`transition_mut` functions require the generated token, whose constructor
+remains private to the implementation module. Safe caller code therefore
+cannot bypass the implementation's transition methods.
 
 Because `Transition`, `ConnectionStandin`, and the states are owned by other
 crates, the implementation crate cannot add another transition.
@@ -54,7 +64,7 @@ A state can be split while preserving its type-level identity:
 
 ```rust
 let (state, data) = connection.decompose();
-let connection = State::recompose(state, data)?;
+let connection = StateOwned::recompose(state, data)?;
 ```
 
 Both opaque values carry the same random `u64`. Recomposition rejects tokens
@@ -64,8 +74,8 @@ The project uses nightly Rust because arbitrary self types are unstable:
 
 ```rust
 pub fn connect(
-    self: State<Self, states::Disconnected>,
-) -> State<Self, states::Connected> {
+    self: State<StorageStateOwned, Self, states::Disconnected>,
+) -> State<StorageStateOwned, Self, states::Connected> {
     self.transition()()
 }
 ```
@@ -76,26 +86,30 @@ Operations shared by several states use a generated union marker:
 StateUnion!(Online: Connected + Authenticated);
 ```
 
-The state marker is a zero-sized `PhantomData`; `#[repr(transparent)]` makes
-`State<T, S>` layout-compatible with `T`.
+The concrete owned state marker is a zero-sized `PhantomData`;
+`#[repr(transparent)]` makes `StateOwned<T, S>` layout-compatible with `T`.
 
-`State` also preserves arbitrary-self receiver chains for uniquely owned
-storage. `Box<T>`, `Pin<Box<T>>`, `&mut T`, `UniqueRc<T>`, and `UniqueArc<T>`
-forward the implementation contract, allowing receivers such as:
+`State<Storage, T, S>` generalizes over storage backends. The standard backends
+include directly owned values, `Box<T>`, `Pin<Box<T>>`, `UniqueRc<T>`,
+`UniqueArc<T>`, and mutable shared-state guards. That lets one implementation
+method preserve the storage backend:
 
 ```rust
-fn connect_boxed(
-    self: State<Box<Self>, Disconnected>,
-) -> State<Box<Self>, Connected> {
+fn connect<Storage>(
+    self: State<Storage, Self, Disconnected>,
+) -> State<Storage, Self, Connected>
+where
+    Storage: StateStorageDeref<Self>,
+{
     self.transition()()
 }
 ```
 
 Shared receivers such as `Rc<T>`, `Arc<T>`, and `&T` are deliberately not
 supported as state storage: they could alias one runtime value with
-independently evolving state tokens. `State<T, S>` implements `Clone` or `Copy`
-when `T` does and the state permits it through the default `StateClone` and
-`StateCopy` auto traits. A definition can opt a state out:
+independently evolving state tokens. `StateOwned<T, S>` implements `Clone` or
+`Copy` when `T` does and the state permits it through the default `StateClone`
+and `StateCopy` auto traits. A definition can opt a state out:
 
 ```rust
 impl !StateCopy for Connected {}
@@ -106,16 +120,38 @@ Opting out of `StateClone` also prevents `Copy`, as required by Rust's `Copy`
 contract. `core::ptr::Unique<T>` is not supported because it is a `Copy`
 raw-pointer primitive rather than an arbitrary-self receiver.
 
+Shared and interior-mutable values use `SharedState<Storage, T>`. The standard
+aliases make the backend explicit: `RefCellState<T>` uses `Rc<RefCell<_>>`,
+while `MutexState<T>` uses `Arc<Mutex<_>>`. These keep one authoritative erased
+state marker next to
+the data. Typed guards verify the current state, and a mutable guard commits its
+final state back to the parent when dropped:
+
+```rust
+let shared = RefCellState::new::<Disconnected>(connection);
+let guard = shared.borrow_mut::<Disconnected>()?;
+let connected = guard.connect();
+drop(connected);
+
+let connected = shared.borrow::<Connected>()?;
+```
+
+Erased state markers are stored with the pinned `dynzst` dependency.
+Alternative lock or cell families implement the non-generic `SharedStorage`
+trait using its `Storage<T>` GAT. Ownership and synchronization compose as
+`RcState<MyStorage, T>` or `ArcState<MyStorage, T>`; the storage marker itself
+does not contain `T`.
+
 Enable transition tracing with:
 
 ```console
 cargo run -p test_use --features statemachines/tracing
 ```
 
-With tracing enabled, each `State` stores a `Vec<TraceEntry>`. Every entry owns
+With tracing enabled, each `StateOwned` stores a `Vec<TraceEntry>`. Every entry owns
 the source and destination as `&'static dyn statemachines::tracing::State` and
 also stores the caller location. The sealed tracing trait is implemented only
 for ZSTs; references contain only the marker's trait-object metadata. The trace is
 preserved across decomposition and recomposition and is available through
-`State::trace()`. Tracing adds runtime storage, and traced states cannot
+`StateOwned::trace()`. Tracing adds runtime storage, and traced states cannot
 implement `Copy`.

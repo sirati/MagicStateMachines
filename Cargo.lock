@@ -3,8 +3,16 @@
 version = 4
 
 [[package]]
+name = "dynzst"
+version = "0.1.0"
+source = "git+https://github.com/sirati/DynZSTBox.rs?rev=0d982f22e063f43000b99fc6f98d0819d5441044#0d982f22e063f43000b99fc6f98d0819d5441044"
+
+[[package]]
 name = "statemachines"
 version = "0.1.0"
+dependencies = [
+ "dynzst",
+]
 
 [[package]]
 name = "test_def"
