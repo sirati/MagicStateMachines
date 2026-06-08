@@ -295,6 +295,41 @@ pub trait StateUnionTransition<Standin, To> {
     type F;
 }
 
+/// Proof that a concrete state can transition through a generated state union.
+#[doc(hidden)]
+pub struct StateUnionTransitionProof<T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    From: StateTrait,
+    Marker: StateUnionDiscriminant,
+    To: StateTrait,
+{
+    marker: PhantomData<fn() -> (T, From, Marker, To)>,
+}
+
+impl<T, From, Marker, To> StateUnionTransitionProof<T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    From: StateTrait,
+    Marker: StateUnionDiscriminant,
+    To: StateTrait,
+{
+    #[doc(hidden)]
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+
+    #[doc(hidden)]
+    pub fn bind<Storage>(&self, _state: &State<Storage, T, From>)
+    where
+        Storage: StateStorage,
+    {
+    }
+}
+
 /// Selects the implementation effect shared by every member of a generated state union.
 #[doc(hidden)]
 pub trait StateUnionSharedEffect<T, To>: StateUnionDiscriminant

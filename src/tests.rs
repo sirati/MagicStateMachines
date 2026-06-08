@@ -455,7 +455,17 @@ mod transition_effect_syntax {
         let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
         let online =
             crate::undiscriminate_state(<Authenticated as InOnline>::into_enum(authenticated));
-        let ready: State<SOwned, _, Ready> = online.transition()();
+        let ready: State<SOwned, _, Ready> = online.with(<_>::prove()).transition()();
+
+        assert_eq!(ready.value, 11);
+    }
+
+    #[test]
+    fn union_proof_transition_infers_proof_from_receiver_and_target() {
+        let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
+        let connected = ready.transition()();
+        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+        let ready: State<SOwned, _, Ready> = authenticated.with(<_>::prove()).transition()();
 
         assert_eq!(ready.value, 11);
     }

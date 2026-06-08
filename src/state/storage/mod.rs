@@ -2,7 +2,8 @@ mod owned;
 
 use crate::{
     DiscriminatedState, Initial, StateMachineImpl, StateUnionDiscriminant,
-    StateUnionDiscriminatedTransition, Transition,
+    StateUnionDiscriminatedTransition, StateUnionErased, StateUnionSharedEffect,
+    StateUnionSharedTransitionEffect, StateUnionTransitionProof, Transition,
 };
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -181,6 +182,35 @@ where
     marker: PhantomData<fn() -> (To, Effect)>,
 }
 
+/// A state receiver carrying a generated union-transition proof.
+#[doc(hidden)]
+pub struct StateUnionProvenState<Storage, T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    From: crate::StateTrait,
+    Marker: StateUnionDiscriminant,
+    To: crate::StateTrait,
+{
+    state: State<Storage, T, From>,
+    marker: PhantomData<fn() -> (Marker, To)>,
+}
+
+/// A callable transition proven through a generated state union.
+#[doc(hidden)]
+pub struct StateUnionProofTransitionCall<Storage, T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    From: crate::StateTrait,
+    Marker: StateUnionDiscriminant,
+    To: crate::StateTrait,
+{
+    state: State<Storage, T, From>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> (Marker, To)>,
+}
+
 /// A callable discriminated-union transition that returns to the original storage after transition.
 #[doc(hidden)]
 pub struct DiscriminatedTransitionCall<Storage, T, Marker, To>
@@ -255,6 +285,52 @@ where
     }
 }
 
+impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
+    for StateUnionProofTransitionCall<Storage, T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: SMut,
+    From: StateUnionErased<Marker>,
+    Marker: StateUnionSharedTransitionEffect<T, To, Args>,
+    Args: core::marker::Tuple,
+    To: crate::StateTrait,
+{
+    type Output = State<Storage, T, To>;
+
+    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+        Marker::apply(Storage::s_mut(&mut self.state.inner), args);
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
+impl<Storage, T, From, Marker, To> Deref for StateUnionProvenState<Storage, T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: SRef,
+    From: crate::StateTrait,
+    Marker: StateUnionDiscriminant,
+    To: crate::StateTrait,
+{
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        Storage::s_ref(&self.state.inner)
+    }
+}
+
+impl<Storage, T, From, Marker, To> DerefMut for StateUnionProvenState<Storage, T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: SMut,
+    From: crate::StateTrait,
+    Marker: StateUnionDiscriminant,
+    To: crate::StateTrait,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        Storage::s_mut(&mut self.state.inner)
+    }
+}
+
 impl<Storage, T, Marker, To, Args> FnOnce<Args>
     for DiscriminatedTransitionCall<Storage, T, Marker, To>
 where
@@ -315,6 +391,28 @@ where
     }
 }
 
+/// Creates a callable transition from a union-membership proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_union_proof<Storage, T, S, Marker, Next>(
+    proven: StateUnionProvenState<Storage, T, S, Marker, Next>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> StateUnionProofTransitionCall<Storage, T, S, Marker, Next>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: StateUnionErased<Marker>,
+    Marker: StateUnionSharedEffect<T, Next>,
+    Next: crate::StateTrait,
+{
+    StateUnionProofTransitionCall {
+        state: proven.state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
 #[doc(hidden)]
 pub fn transition_concrete_after_effect<Storage, T, From, To, Args, Effect>(
     mut state: State<Storage, T, From>,
@@ -361,6 +459,24 @@ where
     pub(crate) fn from_inner(inner: Storage::Inner<T, S>) -> Self {
         Self {
             inner,
+            marker: PhantomData,
+        }
+    }
+
+    /// Binds a generated union-transition proof to this state.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with<Marker, To>(
+        self,
+        _proof: StateUnionTransitionProof<T, S, Marker, To>,
+    ) -> StateUnionProvenState<Storage, T, S, Marker, To>
+    where
+        S: StateUnionErased<Marker>,
+        Marker: StateUnionSharedEffect<T, To>,
+        To: crate::StateTrait,
+    {
+        StateUnionProvenState {
+            state: self,
             marker: PhantomData,
         }
     }

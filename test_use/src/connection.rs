@@ -107,8 +107,7 @@ impl Connection {
     where
         S: SMut,
     {
-        <_>::into_enum(self).transition_discriminated()()
-        //statemachines::undiscriminate_state(<_>::into_enum(self)).transition()()
+        self.with(<_>::prove()).transition()()
     }
 
     #[must_use]
@@ -116,7 +115,7 @@ impl Connection {
     where
         S: SMut,
     {
-        statemachines::undiscriminate_state(<_>::into_enum(self)).transition()()
+        self.with(<_>::prove()).transition()()
     }
 
     #[must_use]

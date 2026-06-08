@@ -81,7 +81,7 @@ impl ConnectionAsync {
     where
         S: SMut,
     {
-        statemachines::undiscriminate_state(<_ as InOnline>::into_enum(self)).transition()()
+        self.with(<_>::prove()).transition()()
     }
 
     pub(crate) async fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>

@@ -44,5 +44,5 @@ StateMachineDefinition! {
 //     Connected | Authenticated
 // );
 
-// // The enum-only form remains independent of marker traits.
+// // The enum-only form remains independent of marker traits
 // StateUnion!(enum OnlineValue: Connected | Authenticated);

@@ -39,11 +39,12 @@ pub use shared::{
 pub use state::{
     DiscriminatedTransitionCall, EffectTransitionCall, SBox, SMove, SMut, SOwned, SPin, SPinBox,
     SRef, SResult, State, StateOwned, StateStorage, StateStorageNew, StateTransitionCall,
-    StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
-    StorageStateOwnedUniqueRc, TransitionCall, TransitionCallsite, TransitionEffect,
-    TransitionEffectSelector, complete_transition_after_effect, transition, transition_callsite,
+    StateUnionProofTransitionCall, StateUnionProvenState, StorageStateOwned, StorageStateOwnedBox,
+    StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, TransitionCall,
+    TransitionCallsite, TransitionEffect, TransitionEffectSelector,
+    complete_transition_after_effect, transition, transition_callsite,
     transition_concrete_after_effect, transition_discriminated_state, transition_state,
-    transition_state_with_effect,
+    transition_state_with_effect, transition_state_with_union_proof,
 };
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]
@@ -56,9 +57,9 @@ pub use union::StateUnionDiscriminatedTransition;
 pub use union::{
     DiscriminatedInner, SDiscriminated, StateUnionErased, StateUnionMember, StateUnionRuntime,
     StateUnionSharedEffect, StateUnionSharedTransitionEffect, StateUnionState,
-    StateUnionTransition, StateUnionVariant, concretize_discriminated_state, discriminate_state,
-    discriminated_state_discriminator, rediscriminate_union_state, state_union_discriminator,
-    undiscriminate_state,
+    StateUnionTransition, StateUnionTransitionProof, StateUnionVariant,
+    concretize_discriminated_state, discriminate_state, discriminated_state_discriminator,
+    rediscriminate_union_state, state_union_discriminator, undiscriminate_state,
 };
 pub use union::{DiscriminatedState, StateUnionDiscriminant};
 

@@ -88,6 +88,7 @@ macro_rules! StateMachineImpl {
             where
                 From: $crate::StateTrait,
                 To: $crate::StateTrait,
+                From: $crate::StateUnionConcreteState,
                 $standin: $crate::Transition<From, To>,
                 $implementation: $crate::TransitionEffectSelector<From, To>;
         }
@@ -115,10 +116,46 @@ macro_rules! StateMachineImpl {
             where
                 From: $crate::StateTrait,
                 To: $crate::StateTrait,
+                From: $crate::StateUnionConcreteState,
                 $standin: $crate::Transition<From, To>,
                 $implementation: $crate::TransitionEffectSelector<From, To>,
             {
                 $crate::transition_state_with_effect(self, __StateMachineTransitionToken(()))
+            }
+        }
+
+        impl $implementation {
+            #[track_caller]
+            fn transition<Storage, From, Marker, To>(
+                self: $crate::StateUnionProvenState<
+                    Storage,
+                    $implementation,
+                    From,
+                    Marker,
+                    To,
+                >,
+            ) -> $crate::StateUnionProofTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                Marker,
+                To,
+            >
+            where
+                Storage: $crate::SRef,
+                Storage::Machine<$implementation>: $crate::StateMachineImpl<
+                    Standin = $standin,
+                    Impl = $implementation,
+                    TransitionToken = __StateMachineTransitionToken,
+                >,
+                From: $crate::StateUnionErased<Marker>,
+                Marker: $crate::StateUnionSharedEffect<$implementation, To>,
+                To: $crate::StateTrait,
+            {
+                $crate::transition_state_with_union_proof(
+                    self,
+                    __StateMachineTransitionToken(()),
+                )
             }
         }
 

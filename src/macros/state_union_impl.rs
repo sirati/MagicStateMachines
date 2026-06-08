@@ -380,6 +380,14 @@ macro_rules! __StateUnion {
             Self: Sized,
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl;
+
+        #[must_use]
+        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
+        where
+            Self: Sized,
+            T: $crate::StateMachineImpl,
+            To: $crate::StateTrait,
+            $marker: $crate::StateUnionSharedEffect<T, To>;
     };
     (@erased_identity_impl $marker:ident) => {
         fn into_union_erased<Storage, T>(
@@ -406,6 +414,7 @@ macro_rules! __StateUnion {
                 )
             }
         }
+
     };
     (@erased_variant_impl $marker:ident $variant:ident) => {
         fn into_union_erased<Storage, T>(
@@ -424,6 +433,7 @@ macro_rules! __StateUnion {
                 )
             }
         }
+
     };
     (
         @erased_union_variant_impl $source:ident => $target:ident:
@@ -459,6 +469,7 @@ macro_rules! __StateUnion {
                 )
             }
         }
+
     };
     (@into_enum_identity_impl $marker:ident) => {
         fn into_enum<Storage, T>(
@@ -484,6 +495,16 @@ macro_rules! __StateUnion {
                 )
             }
         }
+
+        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
+        where
+            Self: Sized,
+            T: $crate::StateMachineImpl,
+            To: $crate::StateTrait,
+            $marker: $crate::StateUnionSharedEffect<T, To>,
+        {
+            $crate::StateUnionTransitionProof::new()
+        }
     };
     (@into_enum_variant_impl $marker:ident $variant:ident) => {
         fn into_enum<Storage, T>(
@@ -500,6 +521,16 @@ macro_rules! __StateUnion {
                     [<$marker Discriminator>]::$variant,
                 )
             }
+        }
+
+        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
+        where
+            Self: Sized,
+            T: $crate::StateMachineImpl,
+            To: $crate::StateTrait,
+            $marker: $crate::StateUnionSharedEffect<T, To>,
+        {
+            $crate::StateUnionTransitionProof::new()
         }
     };
     (
@@ -534,6 +565,16 @@ macro_rules! __StateUnion {
                     discriminator,
                 )
             }
+        }
+
+        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $target, To>
+        where
+            Self: Sized,
+            T: $crate::StateMachineImpl,
+            To: $crate::StateTrait,
+            $target: $crate::StateUnionSharedEffect<T, To>,
+        {
+            $crate::StateUnionTransitionProof::new()
         }
     };
     (
