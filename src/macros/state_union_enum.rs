@@ -46,11 +46,11 @@ macro_rules! __StateUnionEnum {
     ) => {
         $crate::__private::paste! {
             #[allow(dead_code)]
-            pub trait [<$marker IntoEnum>]: [<In $marker>] + $crate::StateUnionConcreteState {
+            pub trait [<$marker IntoEnum>] {
                 #[must_use]
                 fn into_enum<Storage, T>(
                     state: $crate::State<Storage, T, Self>,
-                ) -> $enum_name<Storage, T>
+                ) -> $crate::DiscriminatedState<Storage, T, $marker>
                 where
                     Self: Sized,
                     Storage: $crate::StateStorage,
@@ -60,9 +60,8 @@ macro_rules! __StateUnionEnum {
             impl [<$marker IntoEnum>] for $first {
                 fn into_enum<Storage, T>(
                     state: $crate::State<Storage, T, Self>,
-                ) -> $enum_name<Storage, T>
+                ) -> $crate::DiscriminatedState<Storage, T, $marker>
                 where
-                    Self: Sized,
                     Storage: $crate::StateStorage,
                     T: $crate::StateMachineImpl,
                 {
@@ -74,9 +73,8 @@ macro_rules! __StateUnionEnum {
                 impl [<$marker IntoEnum>] for $state {
                     fn into_enum<Storage, T>(
                         state: $crate::State<Storage, T, Self>,
-                    ) -> $enum_name<Storage, T>
+                    ) -> $crate::DiscriminatedState<Storage, T, $marker>
                     where
-                        Self: Sized,
                         Storage: $crate::StateStorage,
                         T: $crate::StateMachineImpl,
                     {
@@ -84,6 +82,22 @@ macro_rules! __StateUnionEnum {
                     }
                 }
             )*
+
+            impl<Storage, T> [<$marker IntoEnum>] for $enum_name<Storage, T>
+            where
+                Storage: $crate::StateStorage,
+                T: $crate::StateMachineImpl,
+            {
+                fn into_enum<OtherStorage, OtherT>(
+                    _state: $crate::State<OtherStorage, OtherT, Self>,
+                ) -> $crate::DiscriminatedState<OtherStorage, OtherT, $marker>
+                where
+                    OtherStorage: $crate::StateStorage,
+                    OtherT: $crate::StateMachineImpl,
+                {
+                    unreachable!("discriminated states are already enum values")
+                }
+            }
         }
     };
     (
@@ -100,6 +114,14 @@ macro_rules! __StateUnionEnum {
             $(
                 $state($crate::StateUnionVariant<Storage, T, $state, $marker>),
             )*
+        }
+
+        impl $crate::StateUnionDiscriminant for $marker {
+            type Discriminated<Storage, T>
+                = $enum_name<Storage, T>
+            where
+                Storage: $crate::StateStorage,
+                T: $crate::StateMachineImpl;
         }
 
         impl<Storage, T> ::core::ops::Deref for $enum_name<Storage, T>
@@ -139,25 +161,25 @@ macro_rules! __StateUnionEnum {
         }
 
         impl<Storage, T> ::core::convert::From<$crate::State<Storage, T, $first>>
-            for $enum_name<Storage, T>
+            for $crate::DiscriminatedState<Storage, T, $marker>
         where
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
             fn from(state: $crate::State<Storage, T, $first>) -> Self {
-                Self::$first($crate::StateUnionVariant::new(state))
+                $enum_name::$first($crate::StateUnionVariant::new(state))
             }
         }
 
         $(
             impl<Storage, T> ::core::convert::From<$crate::State<Storage, T, $state>>
-                for $enum_name<Storage, T>
+                for $crate::DiscriminatedState<Storage, T, $marker>
             where
                 Storage: $crate::StateStorage,
                 T: $crate::StateMachineImpl,
             {
                 fn from(state: $crate::State<Storage, T, $state>) -> Self {
-                    Self::$state($crate::StateUnionVariant::new(state))
+                    $enum_name::$state($crate::StateUnionVariant::new(state))
                 }
             }
         )*

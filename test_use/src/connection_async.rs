@@ -3,9 +3,9 @@ use core::{
     pin::pin,
     task::{Context, Poll, Waker},
 };
-use statemachines::{SMut, SOwned, SRef, State};
+use statemachines::{DiscriminatedState, SMut, SOwned, SRef, State};
 use test_def::{
-    ConnectionStandin, InOnline, Online, OnlineEnum, OnlineIntoEnum,
+    ConnectionStandin, InOnline, Online, OnlineIntoEnum,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -67,7 +67,19 @@ pub(crate) fn run() {
         disconnected.raw_endpoint()
     );
 
-    let online = block_on(ConnectionAsync::new("localhost:8086").connect()).as_online_enum();
+    let online = block_on(async {
+        let c = ConnectionAsync::new("localhost:8086");
+        let c = c.connect();
+        let c = c.await;
+        let c = c.as_online_enum();
+        //c.as_online_enum()
+        c
+    });
+    // use test_def::OnlineEnum::*;
+    // match online {
+    //     Connected(s) => {}
+    //     Authenticated(s) => todo!(),
+    // }
     println!("{} is asynchronously online via enum", online.endpoint());
 }
 
@@ -100,7 +112,7 @@ impl ConnectionAsync {
     pub(crate) async fn authenticate_if<S>(
         self: State<S, Self, Connected>,
         user: Option<String>,
-    ) -> OnlineEnum<S, Self>
+    ) -> DiscriminatedState<S, Self, Online>
     where
         S: SMut,
     {
@@ -113,11 +125,11 @@ impl ConnectionAsync {
     #[must_use]
     pub(crate) fn as_online_enum<S>(
         self: State<S, Self, impl OnlineIntoEnum>,
-    ) -> OnlineEnum<S, Self>
+    ) -> DiscriminatedState<S, Self, Online>
     where
         S: SRef,
     {
-        <_ as OnlineIntoEnum>::into_enum(self)
+        OnlineIntoEnum::into_enum(self)
     }
 
     pub(crate) async fn disconnect<S>(

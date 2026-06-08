@@ -19,6 +19,18 @@ impl<Marker> !StateUnionConcreteState for StateUnionState<Marker> {}
 #[doc(hidden)]
 pub trait StateUnionMember<State> {}
 
+/// Selects the value-carrying discriminated state type for a union marker.
+pub trait StateUnionDiscriminant {
+    type Discriminated<Storage, T>
+    where
+        Storage: StateStorage,
+        T: StateMachineImpl;
+}
+
+/// Value-carrying discriminated state for a generated union marker.
+pub type DiscriminatedState<Storage, T, Marker> =
+    <Marker as StateUnionDiscriminant>::Discriminated<Storage, T>;
+
 /// Converts a concrete or already-erased member state into a union state.
 #[doc(hidden)]
 pub trait StateUnionErased<Marker>: StateTrait {

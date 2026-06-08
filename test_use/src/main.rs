@@ -25,6 +25,7 @@ mod tests {
     use super::connectable::{Connectable, ConnectionViaTrait};
     use super::connection::Connection;
     use super::connection_async::ConnectionAsync;
+    use test_def::{OnlineEnum, OnlineIntoEnum};
 
     fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
         let mut future = pin!(future);
@@ -115,5 +116,12 @@ mod tests {
             .authenticate_if(None);
 
         assert_eq!(online.endpoint(), "localhost:8090");
+    }
+
+    #[test]
+    fn online_enum_is_online_into_enum() {
+        fn assert_online_into_enum<T: OnlineIntoEnum>() {}
+
+        assert_online_into_enum::<OnlineEnum<statemachines::SOwned, Connection>>();
     }
 }

@@ -49,6 +49,7 @@ pub use state_trait::StateTrait;
 pub use tracing::TraceEntry;
 #[doc(hidden)]
 pub use union::StateUnionConcreteState;
+pub use union::{DiscriminatedState, StateUnionDiscriminant};
 #[doc(hidden)]
 pub use union::{
     StateUnionErased, StateUnionMember, StateUnionRuntime, StateUnionState, StateUnionTransition,

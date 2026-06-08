@@ -3,7 +3,9 @@
 /// The supported forms are:
 ///
 /// - `StateUnion!(Online: Connected | Authenticated)` for marker `Online`, trait `InOnline`, and `OnlineEnum`.
+///   APIs can name the value-carrying type as `DiscriminatedState<Storage, T, Online>`.
 /// - `StateUnion!(Online: Parent, Connected | Authenticated)` with supertrait `InParent` and `OnlineEnum`.
+///   APIs can name the value-carrying type as `DiscriminatedState<Storage, T, Online>`.
 /// - `StateUnion!(Online, enum CustomOnline: Connected | Authenticated)` with a custom enum name.
 /// - `StateUnion!(enum OnlineEnum: Connected | Authenticated)` for only an enum.
 ///
