@@ -3,10 +3,10 @@ mod storage;
 
 pub use owned::{SPin, StateOwned, TransitionCall, transition};
 pub use storage::{
-    EffectTransitionCall, ErasedEffectTransitionCall, SBox, SMove, SMut, SOwned, SPinBox, SRef,
+    DiscriminatedTransitionCall, EffectTransitionCall, SBox, SMove, SMut, SOwned, SPinBox, SRef,
     SResult, State, StateStorage, StateStorageNew, StateTransitionCall, StorageStateOwned,
     StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
     StorageStateOwnedUniqueRc, TransitionCallsite, TransitionEffect, TransitionEffectSelector,
-    complete_transition_after_effect, transition_callsite, transition_erased_state_with_effect,
-    transition_state, transition_state_with_effect,
+    complete_transition_after_effect, transition_callsite, transition_concrete_after_effect,
+    transition_discriminated_state, transition_state, transition_state_with_effect,
 };

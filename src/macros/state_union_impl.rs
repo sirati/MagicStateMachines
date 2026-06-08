@@ -120,7 +120,7 @@ macro_rules! __StateUnion {
             }
 
             $crate::__StateUnion!(
-                @transition_effect $marker:
+                @discriminated_transition $marker:
                 $first $(| $state)*
             );
 
@@ -221,7 +221,7 @@ macro_rules! __StateUnion {
             }
 
             $crate::__StateUnion!(
-                @transition_effect $marker:
+                @discriminated_transition $marker:
                 $first $(| $state)*
             );
 
@@ -253,44 +253,66 @@ macro_rules! __StateUnion {
         $crate::__StateUnionEnum!(@standalone_enum $enum_name: $first $(| $state)*);
     };
     (
-        @transition_effect $marker:ident:
+        @discriminated_transition $marker:ident:
         $first:ident $(| $state:ident)*
     ) => {
-        impl<T, To> $crate::StateUnionTransitionEffect<T, To> for $marker
+        impl<T, To, Args> $crate::StateUnionDiscriminatedTransition<T, To, Args> for $marker
         where
             T: $crate::StateMachineImpl
                 + $crate::TransitionEffectSelector<$first, To>,
-            $(
-                T: $crate::TransitionEffectSelector<
-                    $state,
-                    To,
-                    Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
-                >,
-            )*
-        {
-            type Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect;
-        }
-
-        impl<T, To, Args> $crate::StateUnionTransitionEffectApply<T, To, Args>
-            for $marker
-        where
-            T: $crate::StateMachineImpl
-                + $crate::TransitionEffectSelector<$first, To>,
+            To: $crate::StateTrait,
             <T as $crate::TransitionEffectSelector<$first, To>>::Effect:
                 $crate::TransitionEffect<T, $first, To, Args>,
             $(
-                T: $crate::TransitionEffectSelector<
-                    $state,
-                    To,
-                    Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
-                >,
-                <T as $crate::TransitionEffectSelector<$first, To>>::Effect:
+                T: $crate::TransitionEffectSelector<$state, To>,
+                <T as $crate::TransitionEffectSelector<$state, To>>::Effect:
                     $crate::TransitionEffect<T, $state, To, Args>,
             )*
         {
-            fn apply(value: &mut T, args: Args) {
-                <<T as $crate::TransitionEffectSelector<$first, To>>::Effect as
-                    $crate::TransitionEffect<T, $first, To, Args>>::apply(value, args);
+            fn transition<Storage>(
+                state: $crate::DiscriminatedState<Storage, T, Self>,
+                args: Args,
+                callsite: $crate::TransitionCallsite,
+            ) -> $crate::State<Storage, T, To>
+            where
+                Storage: $crate::SMut,
+                To: $crate::StateTrait,
+            {
+                $crate::__private::paste! {
+                    let discriminator = $crate::discriminated_state_discriminator(&state);
+                    match discriminator {
+                        [<$marker Discriminator>]::$first => {
+                            let state =
+                                $crate::concretize_discriminated_state::<Storage, T, $marker, $first>(
+                                    state,
+                                );
+                            $crate::transition_concrete_after_effect::<
+                                Storage,
+                                T,
+                                $first,
+                                To,
+                                Args,
+                                <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
+                            >(state, args, callsite)
+                        }
+                        $(
+                            [<$marker Discriminator>]::$state => {
+                                let state =
+                                    $crate::concretize_discriminated_state::<Storage, T, $marker, $state>(
+                                        state,
+                                    );
+                                $crate::transition_concrete_after_effect::<
+                                    Storage,
+                                    T,
+                                    $state,
+                                    To,
+                                    Args,
+                                    <T as $crate::TransitionEffectSelector<$state, To>>::Effect,
+                                >(state, args, callsite)
+                            }
+                        )*
+                    }
+                }
             }
         }
     };

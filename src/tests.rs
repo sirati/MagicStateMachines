@@ -384,6 +384,7 @@ mod transition_effect_syntax {
     pub struct Ready;
     pub struct Connected;
     pub struct Authenticated;
+    pub struct Stopped;
 
     struct Runtime {
         value: u32,
@@ -395,6 +396,8 @@ mod transition_effect_syntax {
     impl Transition<Connected, Ready> for Machine {}
     impl Transition<Authenticated, Ready> for Machine {}
     impl Transition<Authenticated, Connected> for Machine {}
+    impl Transition<Connected, Stopped> for Machine {}
+    impl Transition<Authenticated, Stopped> for Machine {}
 
     crate::StateUnion!(Online: Connected | Authenticated);
 
@@ -410,6 +413,14 @@ mod transition_effect_syntax {
         transition Connected | Authenticated => Ready(),
         transition Authenticated => Connected() {
             self.value += 10;
+        }
+
+        transition Connected => Stopped() {
+            self.value += 2;
+        }
+
+        transition Authenticated => Stopped() {
+            self.value += 20;
         }
     }
 
@@ -438,12 +449,31 @@ mod transition_effect_syntax {
     }
 
     #[test]
-    fn erased_union_transition_runs_shared_body() {
+    fn discriminated_union_transition_runs_shared_body_when_bodies_are_shared() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
         let connected = ready.transition()();
         let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
-        let ready: State<SOwned, _, Ready> = authenticated.transition_erased::<Online, _>()();
+        let ready: State<SOwned, _, Ready> =
+            <Authenticated as InOnline>::into_enum(authenticated).transition_discriminated()();
 
         assert_eq!(ready.value, 11);
+    }
+
+    #[test]
+    fn discriminated_union_transition_runs_exact_body_when_bodies_differ() {
+        let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
+        let connected = ready.transition()();
+        let stopped: State<SOwned, _, Stopped> =
+            <Connected as InOnline>::into_enum(connected).transition_discriminated()();
+
+        assert_eq!(stopped.value, 2);
+
+        let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
+        let connected = ready.transition()();
+        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+        let stopped: State<SOwned, _, Stopped> =
+            <Authenticated as InOnline>::into_enum(authenticated).transition_discriminated()();
+
+        assert_eq!(stopped.value, 21);
     }
 }

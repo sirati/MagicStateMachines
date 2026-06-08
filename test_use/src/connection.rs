@@ -107,7 +107,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transition_erased::<Online, _>()()
+        <_ as InOnline>::into_enum(self).transition_discriminated()()
     }
 
     #[must_use]
@@ -115,7 +115,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transition_erased::<Online, _>()()
+        <_ as InOnline>::into_enum(self).transition_discriminated()()
     }
 
     #[must_use]

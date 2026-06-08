@@ -129,7 +129,7 @@ impl ConnectionAsync {
     where
         S: SRef,
     {
-        InOnline::into_enum(self)
+        <_>::into_enum(self)
     }
 
     pub(crate) async fn disconnect<S>(
@@ -138,7 +138,7 @@ impl ConnectionAsync {
     where
         S: SMut,
     {
-        self.transition_erased::<Online, _>()()
+        <_>::into_enum(self).transition_discriminated()()
     }
 
     pub(crate) async fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>

@@ -1,8 +1,8 @@
 mod owned;
 
 use crate::{
-    DiscriminatedState, Initial, SDiscriminated, StateMachineImpl, StateUnionDiscriminant,
-    StateUnionState, Transition, undiscriminate_state,
+    DiscriminatedState, Initial, StateMachineImpl, StateUnionDiscriminant,
+    StateUnionDiscriminatedTransition, Transition,
 };
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -181,9 +181,9 @@ where
     marker: PhantomData<fn() -> (To, Effect)>,
 }
 
-/// A callable erased-union transition that returns to the original storage after transition.
+/// A callable discriminated-union transition that returns to the original storage after transition.
 #[doc(hidden)]
-pub struct ErasedEffectTransitionCall<Storage, T, Marker, To, Effect>
+pub struct DiscriminatedTransitionCall<Storage, T, Marker, To>
 where
     T: StateMachineImpl,
     Storage: StateStorage,
@@ -191,7 +191,7 @@ where
 {
     state: DiscriminatedState<Storage, T, Marker>,
     callsite: TransitionCallsite,
-    marker: PhantomData<fn() -> (To, Effect)>,
+    marker: PhantomData<fn() -> To>,
 }
 
 #[cfg(feature = "tracing")]
@@ -255,32 +255,19 @@ where
     }
 }
 
-impl<Storage, T, Marker, To, Args, Effect> FnOnce<Args>
-    for ErasedEffectTransitionCall<Storage, T, Marker, To, Effect>
+impl<Storage, T, Marker, To, Args> FnOnce<Args>
+    for DiscriminatedTransitionCall<Storage, T, Marker, To>
 where
     T: StateMachineImpl,
     Storage: SMut,
-    Marker: StateUnionDiscriminant,
-    T::Standin: Transition<StateUnionState<Marker>, To>,
-    <T::Standin as Transition<StateUnionState<Marker>, To>>::F: FnOnce<Args, Output = ()>,
+    Marker: StateUnionDiscriminatedTransition<T, To, Args>,
     Args: core::marker::Tuple,
-    StateUnionState<Marker>: crate::StateTrait,
     To: crate::StateTrait,
-    Effect: TransitionEffect<T, StateUnionState<Marker>, To, Args>,
 {
     type Output = State<Storage, T, To>;
 
-    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
-        Effect::apply(
-            <SDiscriminated<Storage, Marker::Discriminator> as SMut>::s_mut(&mut self.state.inner),
-            args,
-        );
-        let transitioned =
-            SDiscriminated::<Storage, Marker::Discriminator>::complete_transition_after_effect(
-                self.state,
-                self.callsite,
-            );
-        undiscriminate_state(transitioned)
+    extern "rust-call" fn call_once(self, args: Args) -> Self::Output {
+        Marker::transition(self.state, args, self.callsite)
     }
 }
 
@@ -328,23 +315,38 @@ where
     }
 }
 
-/// Creates a callable erased-union transition that runs implementation-side effects first.
+#[doc(hidden)]
+pub fn transition_concrete_after_effect<Storage, T, From, To, Args, Effect>(
+    mut state: State<Storage, T, From>,
+    args: Args,
+    callsite: TransitionCallsite,
+) -> State<Storage, T, To>
+where
+    T: StateMachineImpl,
+    Storage: SMut,
+    From: crate::StateTrait,
+    To: crate::StateTrait,
+    Effect: TransitionEffect<T, From, To, Args>,
+{
+    Effect::apply(Storage::s_mut(&mut state.inner), args);
+    Storage::complete_transition_after_effect(state, callsite)
+}
+
+/// Creates a callable discriminated-union transition that runs the exact concrete effect.
 #[doc(hidden)]
 #[must_use]
 #[track_caller]
-pub fn transition_erased_state_with_effect<Storage, T, Marker, Next, Effect>(
+pub fn transition_discriminated_state<Storage, T, Marker, Next>(
     state: DiscriminatedState<Storage, T, Marker>,
     _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
-) -> ErasedEffectTransitionCall<Storage, T, Marker, Next, Effect>
+) -> DiscriminatedTransitionCall<Storage, T, Marker, Next>
 where
     T: StateMachineImpl,
     Storage: StateStorage,
     Marker: StateUnionDiscriminant,
-    T::Standin: Transition<StateUnionState<Marker>, Next>,
-    StateUnionState<Marker>: crate::StateTrait,
     Next: crate::StateTrait,
 {
-    ErasedEffectTransitionCall {
+    DiscriminatedTransitionCall {
         state,
         callsite: transition_callsite(),
         marker: PhantomData,

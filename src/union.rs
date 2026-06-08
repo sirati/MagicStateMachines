@@ -1,6 +1,6 @@
 use crate::{
     SMove, SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait, Transition,
-    TransitionCallsite, TransitionEffect, TransitionEffectSelector,
+    TransitionCallsite,
 };
 use core::any::Any;
 use core::marker::PhantomData;
@@ -107,6 +107,19 @@ where
     Discriminator: Copy + 'static,
 {
     State::from_inner(state.inner.inner)
+}
+
+#[doc(hidden)]
+#[must_use]
+pub fn concretize_discriminated_state<Storage, T, Marker, Concrete>(
+    state: DiscriminatedState<Storage, T, Marker>,
+) -> State<Storage, T, Concrete>
+where
+    Storage: StateStorage,
+    T: StateMachineImpl,
+    Marker: StateUnionDiscriminant,
+{
+    State::from_inner(Storage::retag(state.inner.inner))
 }
 
 #[doc(hidden)]
@@ -282,22 +295,20 @@ pub trait StateUnionTransition<Standin, To> {
     type F;
 }
 
-/// Resolves implementation-side effects supported by every union member.
+/// Dispatches a discriminated union transition to the concrete state's effect.
 #[doc(hidden)]
-pub trait StateUnionTransitionEffect<T, To>
+pub trait StateUnionDiscriminatedTransition<T, To, Args>: StateUnionDiscriminant
 where
     T: StateMachineImpl,
 {
-    type Effect;
-}
-
-/// Applies the shared implementation-side effect for a union transition.
-#[doc(hidden)]
-pub trait StateUnionTransitionEffectApply<T, To, Args>: StateUnionTransitionEffect<T, To>
-where
-    T: StateMachineImpl,
-{
-    fn apply(value: &mut T, args: Args);
+    fn transition<Storage>(
+        state: DiscriminatedState<Storage, T, Self>,
+        args: Args,
+        callsite: TransitionCallsite,
+    ) -> State<Storage, T, To>
+    where
+        Storage: SMut,
+        To: StateTrait;
 }
 
 impl<Standin, Marker, To> Transition<StateUnionState<Marker>, To> for Standin
@@ -305,25 +316,6 @@ where
     Marker: StateUnionTransition<Standin, To>,
 {
     type F = Marker::F;
-}
-
-impl<T, Marker, To> TransitionEffectSelector<StateUnionState<Marker>, To> for T
-where
-    T: StateMachineImpl,
-    Marker: StateUnionTransitionEffect<T, To>,
-{
-    type Effect = Marker::Effect;
-}
-
-impl<T, Marker, To, Args, Effect> TransitionEffect<T, StateUnionState<Marker>, To, Args> for Effect
-where
-    T: StateMachineImpl,
-    Marker: StateUnionTransitionEffect<T, To, Effect = Effect>
-        + StateUnionTransitionEffectApply<T, To, Args>,
-{
-    fn apply(value: &mut T, args: Args) {
-        Marker::apply(value, args);
-    }
 }
 
 /// A union variant that preserves its concrete state while exposing the joint state.

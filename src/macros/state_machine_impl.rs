@@ -90,38 +90,30 @@ macro_rules! StateMachineImpl {
         }
 
         #[allow(dead_code)]
-        trait __GenericStateUnionTransitionExt<Storage, From>
+        trait __GenericStateUnionTransitionExt<Storage, Marker>
         where
             Storage: $crate::StateStorage,
+            Marker: $crate::StateUnionDiscriminant,
         {
             #[must_use]
             #[track_caller]
-            fn transition_erased<Marker, To>(
+            fn transition_discriminated<To>(
                 self,
-            ) -> $crate::ErasedEffectTransitionCall<
+            ) -> $crate::DiscriminatedTransitionCall<
                 Storage,
                 $implementation,
                 Marker,
                 To,
-                <$implementation as $crate::TransitionEffectSelector<
-                    $crate::StateUnionState<Marker>,
-                    To,
-                >>::Effect,
             >
             where
-                From: $crate::StateUnionErased<Marker>,
-                Marker: $crate::StateUnionDiscriminant,
-                $crate::StateUnionState<Marker>: $crate::StateTrait,
-                To: $crate::StateTrait,
-                $standin: $crate::Transition<$crate::StateUnionState<Marker>, To>,
-                $implementation:
-                    $crate::TransitionEffectSelector<$crate::StateUnionState<Marker>, To>;
+                To: $crate::StateTrait;
         }
 
-        impl<Storage, From> __GenericStateUnionTransitionExt<Storage, From>
-            for $crate::State<Storage, $implementation, From>
+        impl<Storage, Marker> __GenericStateUnionTransitionExt<Storage, Marker>
+            for $crate::DiscriminatedState<Storage, $implementation, Marker>
         where
             Storage: $crate::StateStorage,
+            Marker: $crate::StateUnionDiscriminant,
             Storage::Machine<$implementation>: $crate::StateMachineImpl<
                     Standin = $standin,
                     Impl = $implementation,
@@ -129,31 +121,18 @@ macro_rules! StateMachineImpl {
                 >,
         {
             #[track_caller]
-            fn transition_erased<Marker, To>(
+            fn transition_discriminated<To>(
                 self,
-            ) -> $crate::ErasedEffectTransitionCall<
+            ) -> $crate::DiscriminatedTransitionCall<
                 Storage,
                 $implementation,
                 Marker,
                 To,
-                <$implementation as $crate::TransitionEffectSelector<
-                    $crate::StateUnionState<Marker>,
-                    To,
-                >>::Effect,
             >
             where
-                From: $crate::StateUnionErased<Marker>,
-                Marker: $crate::StateUnionDiscriminant,
-                $crate::StateUnionState<Marker>: $crate::StateTrait,
                 To: $crate::StateTrait,
-                $standin: $crate::Transition<$crate::StateUnionState<Marker>, To>,
-                $implementation:
-                    $crate::TransitionEffectSelector<$crate::StateUnionState<Marker>, To>,
             {
-                $crate::transition_erased_state_with_effect(
-                    <From as $crate::StateUnionErased<Marker>>::into_union_erased(self),
-                    __StateMachineTransitionToken(()),
-                )
+                $crate::transition_discriminated_state(self, __StateMachineTransitionToken(()))
             }
         }
     };
