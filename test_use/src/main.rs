@@ -1,6 +1,7 @@
 #![feature(arbitrary_self_types)]
 #![forbid(unsafe_code)]
 
+mod connectable;
 mod connection;
 mod connection_async;
 mod custom_backend;
@@ -9,6 +10,7 @@ mod owned;
 fn main() {
     owned::run();
     connection_async::run();
+    connectable::run();
     custom_backend::run();
 }
 
@@ -20,6 +22,7 @@ mod tests {
         task::{Context, Poll, Waker},
     };
 
+    use super::connectable::{Connectable, ConnectionViaTrait};
     use super::connection::Connection;
     use super::connection_async::ConnectionAsync;
 
@@ -90,5 +93,27 @@ mod tests {
         });
 
         assert_eq!(online.endpoint(), "localhost:8084");
+    }
+
+    #[test]
+    fn connectable_trait_surface_uses_the_same_contract() {
+        let authenticated = ConnectionViaTrait::new("localhost:8089")
+            .connect()
+            .authenticate("carol");
+
+        assert_eq!(authenticated.endpoint(), "localhost:8089");
+        assert_eq!(authenticated.user(), "carol");
+
+        let disconnected = authenticated.disconnect();
+        assert_eq!(disconnected.raw_endpoint(), "localhost:8089");
+    }
+
+    #[test]
+    fn connectable_trait_can_return_online_enum() {
+        let online = ConnectionViaTrait::new("localhost:8090")
+            .connect()
+            .authenticate_if(None);
+
+        assert_eq!(online.endpoint(), "localhost:8090");
     }
 }

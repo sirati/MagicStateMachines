@@ -101,13 +101,11 @@ impl Connection {
     }
 
     #[must_use]
-    pub(crate) fn disconnect_online<S, Current>(
-        self: State<S, Self, Current>,
+    pub(crate) fn disconnect_online<S>(
+        self: State<S, Self, impl InOnline>,
     ) -> State<S, Self, Disconnected>
     where
         S: SMut,
-        Current: InOnline,
-        ConnectionStandin: statemachines::Transition<Current, Disconnected, F = fn()>,
     {
         self.transition_erased::<Online, _>()()
     }
