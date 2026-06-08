@@ -26,6 +26,41 @@ struct SharedRuntime {
     value: u32,
 }
 
+struct MultiInitialMachine;
+struct FirstInitial;
+struct SecondInitial;
+struct MultiTargetMachine;
+struct MultiFromA;
+struct MultiFromB;
+struct MultiToA;
+struct MultiToB;
+
+crate::StateMachineDefinition! {
+    for MultiInitialMachine;
+
+    Initial: FirstInitial | SecondInitial;
+}
+
+crate::StateMachineDefinition! {
+    for MultiTargetMachine;
+
+    Initial: MultiFromA;
+
+    transition MultiFromA | MultiFromB => MultiToA | MultiToB(flag: bool);
+}
+
+fn assert_initial<State>()
+where
+    MultiInitialMachine: Initial<State>,
+{
+}
+
+fn assert_multi_target_transition<From, To>()
+where
+    MultiTargetMachine: Transition<From, To, F = fn(bool)>,
+{
+}
+
 impl !StateCopy for Running {}
 
 impl Initial<Ready> for Machine {}
@@ -202,6 +237,20 @@ fn clone_policy_can_allow_clone_without_copy() {
         trace: Vec::new(),
     };
     let _second = first.clone();
+}
+
+#[test]
+fn state_machine_definition_supports_multiple_initial_states() {
+    assert_initial::<FirstInitial>();
+    assert_initial::<SecondInitial>();
+}
+
+#[test]
+fn state_machine_definition_supports_multiple_target_states() {
+    assert_multi_target_transition::<MultiFromA, MultiToA>();
+    assert_multi_target_transition::<MultiFromA, MultiToB>();
+    assert_multi_target_transition::<MultiFromB, MultiToA>();
+    assert_multi_target_transition::<MultiFromB, MultiToB>();
 }
 
 #[test]

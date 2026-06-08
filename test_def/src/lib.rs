@@ -1,7 +1,7 @@
 #![feature(negative_impls)]
 #![forbid(unsafe_code)]
 
-use statemachines::{Initial, StateClone, StateCopy, StateUnion, Transition};
+use statemachines::{StateClone, StateCopy, StateMachineDefinition};
 
 /// ZST identifying this state-machine contract.
 pub struct ConnectionStandin;
@@ -20,19 +20,21 @@ use states::{Authenticated, Connected, Disconnected};
 impl !StateCopy for Connected {}
 impl !StateClone for Authenticated {}
 
-// These are the complete set of legal transitions. An implementation crate
+// This is the complete set of legal transitions. An implementation crate
 // cannot add more because both the stand-in and states are foreign to it.
-impl Initial<Disconnected> for ConnectionStandin {}
-impl Transition<Disconnected, Connected> for ConnectionStandin {}
-impl Transition<Connected, Disconnected> for ConnectionStandin {}
-impl Transition<Connected, Authenticated> for ConnectionStandin {
-    type F = fn(String);
-}
-impl Transition<Authenticated, Connected> for ConnectionStandin {}
-impl Transition<Authenticated, Disconnected> for ConnectionStandin {}
+StateMachineDefinition! {
+    for ConnectionStandin;
 
-StateUnion!(AllMarker: Disconnected | Connected | Authenticated);
-StateUnion!(Online: AllMarker, Connected | Authenticated);
+    Initial: Disconnected;
+
+    transition Disconnected => Connected();
+    transition Connected => Authenticated(user: String);
+    transition Connected => Disconnected();
+    transition Authenticated => Connected | Disconnected();
+
+    union AllMarker: Disconnected | Connected | Authenticated;
+    union Online: AllMarker, Connected | Authenticated;
+}
 
 // // Trait unions can inherit one or more previously defined union traits.
 // StateUnion!(OnlineMarker: AllMarker, Connected | Authenticated);
