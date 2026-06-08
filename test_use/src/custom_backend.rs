@@ -1,6 +1,6 @@
 use crate::connection::Connection;
-use statemachines::{SArc, SharedStateError, SharedStorage, SharedValue, StateUnionState};
-use std::sync::{Mutex, MutexGuard};
+use statemachines::{SArc, SharedStorage, SharedValue, StateUnionState};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use test_def::{
     Online,
     states::{Connected, Disconnected},
@@ -19,17 +19,29 @@ impl SharedStorage for CustomMutexStorage {
         = MutexGuard<'a, SharedValue<T>>
     where
         T: 'a;
+    type ReadError<'a, T>
+        = PoisonError<MutexGuard<'a, SharedValue<T>>>
+    where
+        T: 'a;
+    type WriteError<'a, T>
+        = PoisonError<MutexGuard<'a, SharedValue<T>>>
+    where
+        T: 'a;
 
     fn new<T>(value: SharedValue<T>) -> Self::Storage<T> {
         Mutex::new(value)
     }
 
-    fn read<T>(storage: &Self::Storage<T>) -> Result<Self::ReadGuard<'_, T>, SharedStateError> {
-        storage.lock().map_err(|_| SharedStateError::Poisoned)
+    fn read<T>(
+        storage: &Self::Storage<T>,
+    ) -> Result<Self::ReadGuard<'_, T>, Self::ReadError<'_, T>> {
+        storage.lock()
     }
 
-    fn write<T>(storage: &Self::Storage<T>) -> Result<Self::WriteGuard<'_, T>, SharedStateError> {
-        storage.lock().map_err(|_| SharedStateError::Poisoned)
+    fn write<T>(
+        storage: &Self::Storage<T>,
+    ) -> Result<Self::WriteGuard<'_, T>, Self::WriteError<'_, T>> {
+        storage.lock()
     }
 }
 

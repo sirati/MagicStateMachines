@@ -34,7 +34,7 @@ pub use shared::{
     MutexStorage, RefCellStorage, RwLockStorage, SArc, SArcMutex, SArcRwLock, SMutView, SMutex,
     SRc, SRcRefCell, SRefCell, SRwLock, SharedBorrowState, SharedState, SharedStateError,
     SharedStorage, SharedValue, StateMut, StateMutTransitionCall, StateRef, StorageStateMut,
-    transition_mut,
+    WrongStateError, transition_mut,
 };
 pub use state::{
     EffectTransitionCall, SBox, SMove, SMut, SOwned, SPin, SPinBox, SRef, SResult, State,

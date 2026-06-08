@@ -1,4 +1,4 @@
-use super::{SharedStateError, SharedStorage, SharedValue};
+use super::{SharedStateError, SharedStorage, SharedValue, WrongStateError};
 use crate::{
     SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait, StateUnionRuntime,
     StateUnionState, Transition, TransitionCallsite,
@@ -17,7 +17,9 @@ where
     G: Deref<Target = SharedValue<T>>,
     S: SharedBorrowState,
 {
-    pub(super) fn from_guard(guard: G) -> Result<Self, SharedStateError> {
+    pub(super) fn from_guard<StorageError>(
+        guard: G,
+    ) -> Result<Self, SharedStateError<StorageError>> {
         S::ensure_state(&guard.state)?;
         Ok(Self {
             guard,
@@ -145,7 +147,9 @@ where
     G: DerefMut<Target = SharedValue<T>>,
     S: SharedBorrowState,
 {
-    pub(super) fn from_guard(guard: G) -> Result<Self, SharedStateError> {
+    pub(super) fn from_guard<StorageError>(
+        guard: G,
+    ) -> Result<Self, SharedStateError<StorageError>> {
         S::ensure_state(&guard.state)?;
         let pending = S::initial_pending(&guard.state);
         Ok(Self {
@@ -235,7 +239,7 @@ where
 }
 
 pub trait SharedBorrowState: StateTrait {
-    fn ensure_state(actual: &ErasedState) -> Result<(), SharedStateError>;
+    fn ensure_state(actual: &ErasedState) -> Result<(), WrongStateError>;
     fn initial_pending(actual: &ErasedState) -> ErasedState;
 }
 
@@ -247,11 +251,11 @@ impl<S> SharedBorrowState for S
 where
     S: StateTrait + ExactSharedBorrowState,
 {
-    fn ensure_state(actual: &ErasedState) -> Result<(), SharedStateError> {
+    fn ensure_state(actual: &ErasedState) -> Result<(), WrongStateError> {
         if state_trait::is_state::<S>(actual) {
             Ok(())
         } else {
-            Err(SharedStateError::WrongState {
+            Err(WrongStateError {
                 expected: core::any::type_name::<S>(),
                 actual: actual.type_name(),
             })
@@ -268,11 +272,11 @@ where
     Marker: StateUnionRuntime + 'static,
     StateUnionState<Marker>: StateTrait,
 {
-    fn ensure_state(actual: &ErasedState) -> Result<(), SharedStateError> {
+    fn ensure_state(actual: &ErasedState) -> Result<(), WrongStateError> {
         if Marker::contains(&**actual) {
             Ok(())
         } else {
-            Err(SharedStateError::WrongState {
+            Err(WrongStateError {
                 expected: Marker::expected_type_name(),
                 actual: actual.type_name(),
             })

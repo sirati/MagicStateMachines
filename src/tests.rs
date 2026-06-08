@@ -8,6 +8,7 @@ use core::marker::PhantomData;
 #[cfg(not(feature = "tracing"))]
 use core::mem::{align_of, size_of};
 use core::pin::Pin;
+use std::cell::BorrowError;
 use std::rc::UniqueRc;
 use std::sync::UniqueArc;
 
@@ -213,16 +214,19 @@ fn rc_state_guard_commits_transition_on_drop() {
     let mut guard = transition_state::<_, _, _, Running>(guard, TransitionToken)();
     guard.value = 3;
 
-    assert!(matches!(
-        alias.borrow::<Ready>(),
-        Err(SharedStateError::Borrowed)
-    ));
+    match alias.borrow::<Ready>() {
+        Err(SharedStateError::Storage(error)) => {
+            let _: BorrowError = error;
+        }
+        Err(SharedStateError::WrongState(_)) => panic!("expected native RefCell borrow error"),
+        Ok(_) => panic!("expected native RefCell borrow error"),
+    }
 
     drop(guard);
 
     assert!(matches!(
         alias.borrow::<Ready>(),
-        Err(SharedStateError::WrongState { .. })
+        Err(SharedStateError::WrongState(_))
     ));
     assert_eq!(alias.borrow::<Running>().expect("committed state").value, 3);
 }
@@ -265,7 +269,7 @@ fn arc_state_guard_commits_transition_on_drop() {
 
     assert!(matches!(
         alias.borrow::<Ready>(),
-        Err(SharedStateError::WrongState { .. })
+        Err(SharedStateError::WrongState(_))
     ));
     assert_eq!(alias.borrow::<Running>().expect("committed state").value, 5);
 }

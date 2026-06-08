@@ -11,6 +11,7 @@ pub use guard::{
 };
 pub use storage::{
     MutexStorage, RefCellStorage, RwLockStorage, SharedStateError, SharedStorage, SharedValue,
+    WrongStateError,
 };
 
 /// Shared state using an explicit, replaceable storage backend.
@@ -72,20 +73,25 @@ where
 
     pub fn borrow<State>(
         &self,
-    ) -> Result<StateRef<Backend::ReadGuard<'_, T>, T, State>, SharedStateError>
+    ) -> Result<
+        StateRef<Backend::ReadGuard<'_, T>, T, State>,
+        SharedStateError<Backend::ReadError<'_, T>>,
+    >
     where
         State: SharedBorrowState,
     {
-        StateRef::from_guard(Backend::read(self.storage.as_ref())?)
+        let guard = Backend::read(self.storage.as_ref()).map_err(SharedStateError::Storage)?;
+        StateRef::from_guard(guard)
     }
 
     pub fn borrow_mut<StateMarker>(
         &self,
-    ) -> Result<SMutView<'_, Backend, T, StateMarker>, SharedStateError>
+    ) -> Result<SMutView<'_, Backend, T, StateMarker>, SharedStateError<Backend::WriteError<'_, T>>>
     where
         StateMarker: SharedBorrowState,
     {
-        StateMut::from_guard(Backend::write(self.storage.as_ref())?).map(State::from_inner)
+        let guard = Backend::write(self.storage.as_ref()).map_err(SharedStateError::Storage)?;
+        StateMut::from_guard(guard).map(State::from_inner)
     }
 }
 
