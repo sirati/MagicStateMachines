@@ -127,6 +127,153 @@ macro_rules! StateMachineImpl {
         }
 
         #[allow(dead_code)]
+        trait __GenericStateWithProofTransitionExt<Storage, From, Marker, To, Kind>
+        where
+            Storage: $crate::StateStorage,
+            From: $crate::StateTrait,
+            Marker: $crate::StateMarker,
+            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            Kind: $crate::StateKind,
+        {
+            #[track_caller]
+            fn proven_transition(
+                self,
+            ) -> $crate::KindProofTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                Marker,
+                To,
+                Kind,
+            >;
+        }
+
+        impl<Storage, From, Marker, To, Kind>
+            __GenericStateWithProofTransitionExt<Storage, From, Marker, To, Kind>
+            for $crate::StateWithProof<
+                Storage,
+                $implementation,
+                From,
+                $crate::TransitionProof<
+                    Storage,
+                    $implementation,
+                    From,
+                    Marker,
+                    To,
+                    Kind,
+                >,
+            >
+        where
+            Storage: $crate::StateStorage,
+            Storage::Machine<$implementation>: $crate::StateMachineImpl<
+                    Standin = $standin,
+                    Impl = $implementation,
+                    TransitionToken = __StateMachineTransitionToken,
+                >,
+            From: $crate::StateTrait,
+            Marker: $crate::StateMarker,
+            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            Kind: $crate::StateKind,
+        {
+            #[track_caller]
+            fn proven_transition(
+                self,
+            ) -> $crate::KindProofTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                Marker,
+                To,
+                Kind,
+            >
+            {
+                $crate::transition_state_with_kind_proof::<
+                    Storage,
+                    $implementation,
+                    From,
+                    Marker,
+                    To,
+                    Kind,
+                >(self, __StateMachineTransitionToken(()))
+            }
+
+        }
+
+        #[allow(dead_code)]
+        trait __GenericStateConcreteProofTransitionExt<Storage, From, Marker, To>
+        where
+            Storage: $crate::StateStorage,
+        {
+            #[track_caller]
+            fn transition(
+                self,
+            ) -> $crate::EffectTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                To,
+                <$implementation as $crate::TransitionEffectSelector<From, To>>::Effect,
+            >
+            where
+                Storage: $crate::SRef,
+                Storage::Machine<$implementation>: $crate::StateMachineImpl<
+                    Standin = $standin,
+                    Impl = $implementation,
+                    TransitionToken = __StateMachineTransitionToken,
+                >,
+                From: $crate::StateTrait + $crate::StateUnionConcreteState,
+                Marker: $crate::StateUnionDiscriminant,
+                To: $crate::StateTrait,
+                $standin: $crate::Transition<From, To>,
+                $implementation: $crate::TransitionEffectSelector<From, To>;
+        }
+
+        impl<Storage, From, Marker, To>
+            __GenericStateConcreteProofTransitionExt<Storage, From, Marker, To>
+            for $crate::StateConcreteProvenState<
+                Storage,
+                $implementation,
+                From,
+                Marker,
+                To,
+            >
+        where
+            Storage: $crate::StateStorage,
+            Storage::Machine<$implementation>: $crate::StateMachineImpl<
+                    Standin = $standin,
+                    Impl = $implementation,
+                    TransitionToken = __StateMachineTransitionToken,
+                >,
+            From: $crate::StateTrait,
+            Marker: $crate::StateUnionDiscriminant,
+            To: $crate::StateTrait,
+        {
+            #[track_caller]
+            fn transition(
+                self,
+            ) -> $crate::EffectTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                To,
+                <$implementation as $crate::TransitionEffectSelector<From, To>>::Effect,
+            >
+            where
+                From: $crate::StateTrait + $crate::StateUnionConcreteState,
+                To: $crate::StateTrait,
+                $standin: $crate::Transition<From, To>,
+                $implementation: $crate::TransitionEffectSelector<From, To>,
+                Marker: $crate::StateUnionDiscriminant,
+            {
+                $crate::transition_state_with_concrete_proof(
+                    self,
+                    __StateMachineTransitionToken(()),
+                )
+            }
+
+        }
+
+        #[allow(dead_code)]
         impl $implementation {
             #[track_caller]
             fn transition<Storage, From, Marker, To>(

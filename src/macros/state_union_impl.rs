@@ -36,6 +36,9 @@ macro_rules! __StateUnion {
             }
             impl [<In $first_super>]
                 for $crate::StateUnionState<$marker>
+            {}
+            impl $crate::In<$first_super>
+                for $crate::StateUnionState<$marker>
             {
                 $crate::__StateUnion!(
                     @into_enum_union_variant_impl $marker => $first_super:
@@ -59,6 +62,9 @@ macro_rules! __StateUnion {
                 }
                 impl [<In $supertrait>]
                     for $crate::StateUnionState<$marker>
+                {}
+                impl $crate::In<$supertrait>
+                    for $crate::StateUnionState<$marker>
                 {
                     $crate::__StateUnion!(@into_enum_identity_impl $supertrait);
                 }
@@ -72,12 +78,12 @@ macro_rules! __StateUnion {
                 $crate::StateTrait
                 + $crate::StateMarker
                 + [<__state_union_seal_ $marker:snake>]::Sealed
+                + $crate::In<$marker>
                 + $crate::StateUnionErased<$marker>
                 + $crate::StateUnionProofMembership<$marker>
                 + [<In $first_super>]
                 $(+ [<In $supertrait>])*
             {
-                $crate::__StateUnion!(@into_enum_method $marker);
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed
@@ -91,7 +97,8 @@ macro_rules! __StateUnion {
             {
                 $crate::__StateUnion!(@erased_identity_impl $marker);
             }
-            impl [<In $marker>] for $crate::StateUnionState<$marker> {
+            impl [<In $marker>] for $crate::StateUnionState<$marker> {}
+            impl $crate::In<$marker> for $crate::StateUnionState<$marker> {
                 $crate::__StateUnion!(@into_enum_identity_impl $marker);
             }
 
@@ -100,7 +107,8 @@ macro_rules! __StateUnion {
             impl $crate::StateUnionErased<$marker> for $first {
                 $crate::__StateUnion!(@erased_variant_impl $marker $first);
             }
-            impl [<In $marker>] for $first {
+            impl [<In $marker>] for $first {}
+            impl $crate::In<$marker> for $first {
                 $crate::__StateUnion!(@into_enum_variant_impl $marker $first);
             }
             impl $crate::StateUnionMember<$first>
@@ -113,7 +121,8 @@ macro_rules! __StateUnion {
                 impl $crate::StateUnionErased<$marker> for $state {
                     $crate::__StateUnion!(@erased_variant_impl $marker $state);
                 }
-                impl [<In $marker>] for $state {
+                impl [<In $marker>] for $state {}
+                impl $crate::In<$marker> for $state {
                     $crate::__StateUnion!(@into_enum_variant_impl $marker $state);
                 }
                 impl $crate::StateUnionMember<$state>
@@ -191,10 +200,10 @@ macro_rules! __StateUnion {
                 $crate::StateTrait
                 + $crate::StateMarker
                 + [<__state_union_seal_ $marker:snake>]::Sealed
+                + $crate::In<$marker>
                 + $crate::StateUnionErased<$marker>
                 + $crate::StateUnionProofMembership<$marker>
             {
-                $crate::__StateUnion!(@into_enum_method $marker);
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed
@@ -208,7 +217,8 @@ macro_rules! __StateUnion {
             {
                 $crate::__StateUnion!(@erased_identity_impl $marker);
             }
-            impl [<In $marker>] for $crate::StateUnionState<$marker> {
+            impl [<In $marker>] for $crate::StateUnionState<$marker> {}
+            impl $crate::In<$marker> for $crate::StateUnionState<$marker> {
                 $crate::__StateUnion!(@into_enum_identity_impl $marker);
             }
 
@@ -217,7 +227,8 @@ macro_rules! __StateUnion {
             impl $crate::StateUnionErased<$marker> for $first {
                 $crate::__StateUnion!(@erased_variant_impl $marker $first);
             }
-            impl [<In $marker>] for $first {
+            impl [<In $marker>] for $first {}
+            impl $crate::In<$marker> for $first {
                 $crate::__StateUnion!(@into_enum_variant_impl $marker $first);
             }
             impl $crate::StateUnionMember<$first>
@@ -230,7 +241,8 @@ macro_rules! __StateUnion {
                 impl $crate::StateUnionErased<$marker> for $state {
                     $crate::__StateUnion!(@erased_variant_impl $marker $state);
                 }
-                impl [<In $marker>] for $state {
+                impl [<In $marker>] for $state {}
+                impl $crate::In<$marker> for $state {
                     $crate::__StateUnion!(@into_enum_variant_impl $marker $state);
                 }
                 impl $crate::StateUnionMember<$state>
@@ -411,21 +423,6 @@ macro_rules! __StateUnion {
             Self: Sized,
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl;
-
-        #[must_use]
-        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
-            T,
-            Self,
-            $marker,
-            To,
-        >
-        where
-            Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
-            T: $crate::StateMachineImpl,
-            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
-            $marker: $crate::StateUnionSharedEffect<T, To>
-                + $crate::StateMarker<Kind = $crate::UnionStateKind>;
-
     };
     (@erased_identity_impl $marker:ident) => {
         fn into_union_erased<Storage, T>(
@@ -510,8 +507,6 @@ macro_rules! __StateUnion {
 
     };
     (@into_enum_identity_impl $marker:ident) => {
-        type Marker = $marker;
-
         fn into_enum<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::DiscriminatedState<Storage, T, $marker>
@@ -536,25 +531,8 @@ macro_rules! __StateUnion {
             }
         }
 
-        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
-            T,
-            Self,
-            $marker,
-            To,
-        >
-        where
-            Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
-            T: $crate::StateMachineImpl,
-            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
-            $marker: $crate::StateUnionSharedEffect<T, To>
-                + $crate::StateMarker<Kind = $crate::UnionStateKind>,
-        {
-            $crate::StateUnionTransitionProof::new()
-        }
     };
     (@into_enum_variant_impl $marker:ident $variant:ident) => {
-        type Marker = $marker;
-
         fn into_enum<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::DiscriminatedState<Storage, T, $marker>
@@ -571,28 +549,11 @@ macro_rules! __StateUnion {
             }
         }
 
-        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
-            T,
-            Self,
-            $marker,
-            To,
-        >
-        where
-            Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
-            T: $crate::StateMachineImpl,
-            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
-            $marker: $crate::StateUnionSharedEffect<T, To>
-                + $crate::StateMarker<Kind = $crate::UnionStateKind>,
-        {
-            $crate::StateUnionTransitionProof::new()
-        }
     };
     (
         @into_enum_union_variant_impl $source:ident => $target:ident:
         $first:ident $(| $state:ident)*
     ) => {
-        type Marker = $target;
-
         fn into_enum<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::DiscriminatedState<Storage, T, $target>
@@ -623,21 +584,6 @@ macro_rules! __StateUnion {
             }
         }
 
-        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
-            T,
-            Self,
-            $target,
-            To,
-        >
-        where
-            Self: Sized + $crate::UnionTransitionProof<T, $target, To>,
-            T: $crate::StateMachineImpl,
-            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
-            $target: $crate::StateUnionSharedEffect<T, To>
-                + $crate::StateMarker<Kind = $crate::UnionStateKind>,
-        {
-            $crate::StateUnionTransitionProof::new()
-        }
     };
     (
         @maybe_conversion_trait [enum $enum_name:ident] $marker:ident:

@@ -1,6 +1,6 @@
 use crate::{
-    SMove, SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait, Transition,
-    TransitionCallsite,
+    SMove, SMut, SRef, State, StateMachineImpl, StateMarker, StateStorage, StateTrait,
+    Transition, TransitionCallsite, TransitionProof, UnionStateKind,
 };
 use core::any::Any;
 use core::marker::PhantomData;
@@ -36,6 +36,52 @@ pub trait StateUnionDiscriminant: Sized {
     where
         Storage: StateStorage,
         T: StateMachineImpl;
+}
+
+/// Marks a state as being a concrete marker or a member of a generated state union.
+pub trait In<Marker>: StateTrait + StateMarker
+where
+    Marker: StateMarker,
+{
+    #[must_use]
+    fn into_enum<Storage, T>(
+        state: State<Storage, T, Self>,
+    ) -> DiscriminatedState<Storage, T, Marker>
+    where
+        Self: Sized,
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>;
+
+    #[doc(hidden)]
+    #[must_use]
+    fn prove<Storage, T, To>(
+    ) -> TransitionProof<Storage, T, Self, Marker, To, <Marker as StateMarker>::Kind>
+    where
+        Self: Sized,
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        To: StateTrait + StateMarker,
+    {
+        TransitionProof::new()
+    }
+}
+
+impl<StateMarkerType> In<StateMarkerType> for StateMarkerType
+where
+    StateMarkerType: StateTrait + StateMarker,
+{
+    fn into_enum<Storage, T>(
+        _state: State<Storage, T, Self>,
+    ) -> DiscriminatedState<Storage, T, StateMarkerType>
+    where
+        Self: Sized,
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        StateMarkerType: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+    {
+        unreachable!("concrete identity states are not generated state unions")
+    }
 }
 
 /// Value-carrying discriminated state for a generated union marker.
@@ -293,43 +339,6 @@ pub trait StateUnionRuntime {
 #[doc(hidden)]
 pub trait StateUnionTransition<Standin, To> {
     type F;
-}
-
-/// Proof that a state can transition through a generated state union.
-#[doc(hidden)]
-pub struct StateUnionTransitionProof<T, From, Marker, To>
-where
-    T: StateMachineImpl,
-    From: StateTrait,
-    Marker: StateUnionDiscriminant,
-    To: StateTrait,
-{
-    marker: PhantomData<fn() -> (T, From, Marker, To)>,
-}
-
-impl<T, From, Marker, To> StateUnionTransitionProof<T, From, Marker, To>
-where
-    T: StateMachineImpl,
-    From: StateTrait + crate::UnionTransitionProof<T, Marker, To>,
-    Marker: StateUnionDiscriminant
-        + StateUnionSharedEffect<T, To>
-        + crate::StateMarker<Kind = crate::UnionStateKind>,
-    To: StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
-{
-    #[doc(hidden)]
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            marker: PhantomData,
-        }
-    }
-
-    #[doc(hidden)]
-    pub fn bind<Storage>(&self, _state: &State<Storage, T, From>)
-    where
-        Storage: StateStorage,
-    {
-    }
 }
 
 /// Proof that a state marker is viewed through a specific generated union trait.

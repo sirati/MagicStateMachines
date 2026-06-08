@@ -1,6 +1,6 @@
-use statemachines::{DiscriminatedState, SMut, SOwned, SRef, SResult, State};
+use statemachines::{DiscriminatedState, In, SMut, SOwned, SRef, SResult, State};
 use test_def::{
-    ConnectionStandin, InOnline, Online,
+    AllMarker, ConnectionStandin, InAllMarker, InOnline, Online,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -92,7 +92,7 @@ impl Connection {
 
     #[must_use]
     pub(crate) fn as_online_enum<S>(
-        self: State<S, Self, impl InOnline>,
+        self: State<S, Self, impl In<Online>>,
     ) -> DiscriminatedState<S, Self, Online>
     where
         S: SRef,
@@ -101,13 +101,13 @@ impl Connection {
     }
 
     #[must_use]
-    pub(crate) fn disconnect_online<S>(
-        self: State<S, Self, impl InOnline>,
+    pub(crate) fn disconnect_online<S, C: In<Online>>(
+        self: State<S, Self, C>,
     ) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
-        self.with(<_>::prove()).transition()()
+        self.with(<_>::prove()).proven_transition()()
     }
 
     #[must_use]
@@ -115,7 +115,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.with(<_>::prove()).transition()()
+        self.with(<_ as In<Online>>::prove()).proven_transition()()
     }
 
     #[must_use]
@@ -123,11 +123,17 @@ impl Connection {
     where
         S: SMut,
     {
-        // self.transition()()
-        self.with(<_>::prove()).transition()()
+        self.with(In::<Authenticated>::prove()).proven_transition()() //this works
+        //self.with(<Authenticated>::prove()).proven_transition()() //this does not work
+        //self.with(<_>::prove()).proven_transition()() //this does not work either
     }
 
     pub(crate) fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str {
+        self.all_endpoint(); //this method must be InOnline not In<Online> in order to be able to call all_endpoint
+        &self.endpoint
+    }
+
+    pub(crate) fn all_endpoint(self: &State<impl SRef, Self, impl In<AllMarker>>) -> &str {
         &self.endpoint
     }
 

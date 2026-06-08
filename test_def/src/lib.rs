@@ -34,6 +34,7 @@ StateMachineDefinition! {
     transition Connected => Disconnected();
     transition Authenticated => Connected | Disconnected();
 
+    union DisconnectedMarker: Disconnected;
     union AllMarker: Disconnected | Connected | Authenticated;
     union Online: AllMarker, Connected | Authenticated;
 }
@@ -48,7 +49,5 @@ StateMachineDefinition! {
 
 // // The enum-only form remains independent of marker traits
 // StateUnion!(enum OnlineValue: Connected | Authenticated);
-
-
 
 //impl<T, U> UnionTransition<Online, U> for T where T: Transition<Connected, U> +   Transition<Authenticated, U> {...}

@@ -1,9 +1,11 @@
 mod owned;
 
 use crate::{
-    DiscriminatedState, Initial, StateMachineImpl, StateUnionDiscriminant,
+    ConcreteStateKind, DiscriminatedState, Initial, StateConcreteProvenState, StateMachineImpl,
+    StateConcreteTransitionProof, StateKind, StateUnionDiscriminant,
     StateUnionDiscriminatedTransition, StateUnionErased, StateUnionProofTarget,
-    StateUnionSharedEffect, StateUnionSharedTransitionEffect, StateUnionTransitionProof, Transition,
+    StateUnionProvenState, StateUnionSharedEffect, StateUnionSharedTransitionEffect,
+    StateUnionTransitionProof, StateWithProof, Transition, UnionStateKind,
 };
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -182,18 +184,32 @@ where
     marker: PhantomData<fn() -> (To, Effect)>,
 }
 
-/// A state receiver carrying a generated union-transition proof.
+/// A callable concrete transition selected by [`StateKind`].
 #[doc(hidden)]
-pub struct StateUnionProvenState<Storage, T, From, Marker, To>
+pub struct ConcreteProofTransitionCall<Storage, T, From, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+{
+    state: State<Storage, T, From>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> To>,
+}
+
+/// A callable transition selected by the receiver state's marker kind.
+#[doc(hidden)]
+pub struct KindProofTransitionCall<Storage, T, From, Marker, To, Kind>
 where
     T: StateMachineImpl,
     Storage: StateStorage,
     From: crate::StateTrait,
-    Marker: StateUnionDiscriminant,
-    To: crate::StateTrait,
+    Marker: crate::StateMarker,
+    To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+    Kind: StateKind,
 {
     state: State<Storage, T, From>,
-    marker: PhantomData<fn() -> (Marker, To)>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> (Marker, To, Kind)>,
 }
 
 /// A callable transition proven through a generated state union.
@@ -285,6 +301,73 @@ where
     }
 }
 
+impl<Storage, T, From, To, Args> FnOnce<Args>
+    for ConcreteProofTransitionCall<Storage, T, From, To>
+where
+    T: StateMachineImpl + TransitionEffectSelector<From, To>,
+    Storage: SMut,
+    T::Standin: Transition<From, To>,
+    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
+    Args: core::marker::Tuple,
+    From: crate::StateTrait,
+    To: crate::StateTrait,
+    <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
+{
+    type Output = State<Storage, T, To>;
+
+    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+        <T as TransitionEffectSelector<From, To>>::Effect::apply(
+            Storage::s_mut(&mut self.state.inner),
+            args,
+        );
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
+impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
+    for KindProofTransitionCall<Storage, T, From, Marker, To, ConcreteStateKind>
+where
+    T: StateMachineImpl + TransitionEffectSelector<From, To>,
+    Storage: SMut,
+    T::Standin: Transition<From, To>,
+    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
+    Args: core::marker::Tuple,
+    From: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+    Marker: crate::StateMarker,
+    To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+    <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
+{
+    type Output = State<Storage, T, To>;
+
+    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+        <T as TransitionEffectSelector<From, To>>::Effect::apply(
+            Storage::s_mut(&mut self.state.inner),
+            args,
+        );
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
+impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
+    for KindProofTransitionCall<Storage, T, From, Marker, To, UnionStateKind>
+where
+    T: StateMachineImpl,
+    Storage: SMut,
+    From: crate::StateTrait + crate::StateMarker + crate::In<Marker>,
+    Marker: StateUnionDiscriminant
+        + crate::StateMarker<Kind = UnionStateKind>
+        + StateUnionSharedTransitionEffect<T, To, Args>,
+    Args: core::marker::Tuple,
+    To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+{
+    type Output = State<Storage, T, To>;
+
+    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+        Marker::apply(Storage::s_mut(&mut self.state.inner), args);
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
 impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
     for StateUnionProofTransitionCall<Storage, T, From, Marker, To>
 where
@@ -300,34 +383,6 @@ where
     extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
         Marker::apply(Storage::s_mut(&mut self.state.inner), args);
         Storage::complete_transition_after_effect(self.state, self.callsite)
-    }
-}
-
-impl<Storage, T, From, Marker, To> Deref for StateUnionProvenState<Storage, T, From, Marker, To>
-where
-    T: StateMachineImpl,
-    Storage: SRef,
-    From: crate::StateTrait,
-    Marker: StateUnionDiscriminant,
-    To: crate::StateTrait,
-{
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        Storage::s_ref(&self.state.inner)
-    }
-}
-
-impl<Storage, T, From, Marker, To> DerefMut for StateUnionProvenState<Storage, T, From, Marker, To>
-where
-    T: StateMachineImpl,
-    Storage: SMut,
-    From: crate::StateTrait,
-    Marker: StateUnionDiscriminant,
-    To: crate::StateTrait,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        Storage::s_mut(&mut self.state.inner)
     }
 }
 
@@ -408,6 +463,166 @@ where
 {
     StateUnionProofTransitionCall {
         state: proven.state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable transition from a concrete-state proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_concrete_proof<Storage, T, S, Marker, Next>(
+    proven: StateConcreteProvenState<Storage, T, S, Marker, Next>,
+    token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> EffectTransitionCall<
+    Storage,
+    T,
+    S,
+    Next,
+    <T as TransitionEffectSelector<S, Next>>::Effect,
+>
+where
+    T: StateMachineImpl + TransitionEffectSelector<S, Next>,
+    Storage: StateStorage,
+    T::Standin: Transition<S, Next>,
+    Marker: StateUnionDiscriminant,
+    S: crate::StateTrait,
+    Next: crate::StateTrait,
+{
+    transition_state_with_effect(proven.state, token)
+}
+
+/// Creates a callable transition from an unresolved concrete-state proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_concrete_transition_proof<Storage, T, S, Marker, Next>(
+    proven: StateWithProof<Storage, T, S, StateConcreteTransitionProof<T, S, Marker, Next>>,
+    token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> EffectTransitionCall<
+    Storage,
+    T,
+    S,
+    Next,
+    <T as TransitionEffectSelector<S, Next>>::Effect,
+>
+where
+    T: StateMachineImpl + TransitionEffectSelector<S, Next>,
+    Storage: StateStorage,
+    T::Standin: Transition<S, Next>,
+    Marker: StateUnionDiscriminant,
+    S: crate::StateTrait,
+    Next: crate::StateTrait,
+{
+    let StateWithProof {
+        state,
+        proof: _proof,
+    } = proven;
+    transition_state_with_effect(state, token)
+}
+
+/// Creates a callable transition from an unresolved union-membership proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_union_transition_proof<Storage, T, S, Marker, Next>(
+    proven: StateWithProof<Storage, T, S, StateUnionTransitionProof<T, S, Marker, Next>>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> StateUnionProofTransitionCall<Storage, T, S, Marker, Next>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: StateUnionErased<Marker>,
+    Marker: StateUnionSharedEffect<T, Next>,
+    Next: crate::StateTrait,
+{
+    let StateWithProof {
+        state,
+        proof: _proof,
+    } = proven;
+    StateUnionProofTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable erased transition from a kind-selected proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_erased_transition_proof<Storage, T, S, Marker, Next, Proof>(
+    proven: StateWithProof<Storage, T, S, Proof>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> StateUnionProofTransitionCall<Storage, T, S, Marker, Next>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: crate::StateTrait,
+    Marker: StateUnionDiscriminant,
+    Next: crate::StateTrait,
+{
+    let StateWithProof {
+        state,
+        proof: _proof,
+    } = proven;
+    StateUnionProofTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a concrete callable transition from a kind-selected proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_concrete_kind_proof<Storage, T, S, Marker, Next, Kind>(
+    proven: StateWithProof<Storage, T, S, crate::TransitionProof<Storage, T, S, Marker, Next, Kind>>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> ConcreteProofTransitionCall<Storage, T, S, Next>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: crate::StateTrait,
+    Marker: crate::StateMarker,
+    Next: crate::StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
+    Kind: StateKind,
+{
+    let StateWithProof {
+        state,
+        proof: _proof,
+    } = proven;
+    ConcreteProofTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable transition from a kind-selected proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_kind_proof<Storage, T, S, Marker, Next, Kind>(
+    proven: StateWithProof<Storage, T, S, crate::TransitionProof<Storage, T, S, Marker, Next, Kind>>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> KindProofTransitionCall<Storage, T, S, Marker, Next, Kind>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: crate::StateTrait,
+    Marker: crate::StateMarker,
+    Next: crate::StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
+    Kind: StateKind,
+{
+    let StateWithProof {
+        state,
+        proof: _proof,
+    } = proven;
+    KindProofTransitionCall {
+        state,
         callsite: transition_callsite(),
         marker: PhantomData,
     }
@@ -503,20 +718,17 @@ where
     /// Binds a generated union-transition proof to this state.
     #[doc(hidden)]
     #[must_use]
-    pub fn with<Marker, To>(
+    pub fn with<Marker, To, Kind>(
         self,
-        proof: StateUnionTransitionProof<T, S, Marker, To>,
-    ) -> StateUnionProvenState<Storage, T, S, Marker, To>
+        proof: crate::TransitionProof<Storage, T, S, Marker, To, Kind>,
+    ) -> StateWithProof<Storage, T, S, crate::TransitionProof<Storage, T, S, Marker, To, Kind>>
     where
-        S: StateUnionErased<Marker> + crate::UnionTransitionProof<T, Marker, To>,
-        Marker: StateUnionSharedEffect<T, To> + crate::StateMarker<Kind = crate::UnionStateKind>,
+        S: crate::StateTrait,
+        Marker: crate::StateMarker,
         To: crate::StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
+        Kind: crate::StateKind,
     {
-        proof.bind(&self);
-        StateUnionProvenState {
-            state: self,
-            marker: PhantomData,
-        }
+        StateWithProof { state: self, proof }
     }
 }
 

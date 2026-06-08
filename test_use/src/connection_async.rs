@@ -1,6 +1,6 @@
-use statemachines::{DiscriminatedState, SMut, SOwned, SRef, State};
+use statemachines::{DiscriminatedState, In, SMut, SOwned, SRef, State};
 use test_def::{
-    ConnectionStandin, InOnline, Online,
+    ConnectionStandin, Online,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -60,28 +60,29 @@ impl ConnectionAsync {
         S: SMut,
     {
         match user {
-            Some(user) => <Authenticated as InOnline>::into_enum(self.authenticate(user).await),
-            None => <Connected as InOnline>::into_enum(self),
+            Some(user) => <Authenticated as In<Online>>::into_enum(self.authenticate(user).await),
+            None => <Connected as In<Online>>::into_enum(self),
         }
     }
 
     #[must_use]
     pub(crate) fn as_online_enum<S>(
-        self: State<S, Self, impl InOnline>,
+        self: State<S, Self, impl In<Online>>,
     ) -> DiscriminatedState<S, Self, Online>
     where
         S: SRef,
     {
-        <_>::into_enum(self)
+        <_ as In<Online>>::into_enum(self)
     }
 
     pub(crate) async fn disconnect<S>(
-        self: State<S, Self, impl InOnline>,
+        self: State<S, Self, impl In<Online>>,
     ) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
-        self.with(<_>::prove()).transition()()
+        self.with(<_ as In<Online>>::prove())
+            .proven_transition()()
     }
 
     pub(crate) async fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
@@ -91,7 +92,7 @@ impl ConnectionAsync {
         self.transition()()
     }
 
-    pub(crate) fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str {
+    pub(crate) fn endpoint(self: &State<impl SRef, Self, impl In<Online>>) -> &str {
         &self.endpoint
     }
 

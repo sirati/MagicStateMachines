@@ -1,6 +1,6 @@
-use statemachines::{DiscriminatedState, SMut, SOwned, SRef, State, StateMachineImpl};
+use statemachines::{DiscriminatedState, In, SMut, SOwned, SRef, State, StateMachineImpl};
 use test_def::{
-    ConnectionStandin, InOnline, Online,
+    ConnectionStandin, Online,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -29,7 +29,7 @@ pub(crate) trait Connectable:
         S: SMut;
 
     #[must_use]
-    fn disconnect<S>(self: State<S, Self, impl InOnline>) -> State<S, Self, Disconnected>
+    fn disconnect<S>(self: State<S, Self, impl In<Online>>) -> State<S, Self, Disconnected>
     where
         S: SMut;
 
@@ -47,20 +47,22 @@ pub(crate) trait Connectable:
         S: SMut,
     {
         match user {
-            Some(user) => <Authenticated as InOnline>::into_enum(self.authenticate(user)),
-            None => <Connected as InOnline>::into_enum(self),
+            Some(user) => <Authenticated as In<Online>>::into_enum(self.authenticate(user)),
+            None => <Connected as In<Online>>::into_enum(self),
         }
     }
 
     #[must_use]
-    fn as_online_enum<S>(self: State<S, Self, impl InOnline>) -> DiscriminatedState<S, Self, Online>
+    fn as_online_enum<S>(
+        self: State<S, Self, impl In<Online>>,
+    ) -> DiscriminatedState<S, Self, Online>
     where
         S: SRef,
     {
-        <_ as InOnline>::into_enum(self)
+        <_ as In<Online>>::into_enum(self)
     }
 
-    fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str;
+    fn endpoint(self: &State<impl SRef, Self, impl In<Online>>) -> &str;
 
     fn raw_endpoint(&self) -> &str;
 
@@ -113,11 +115,12 @@ impl Connectable for ConnectionViaTrait {
         self.transition()(user.into())
     }
 
-    fn disconnect<S>(self: State<S, Self, impl InOnline>) -> State<S, Self, Disconnected>
+    fn disconnect<S>(self: State<S, Self, impl In<Online>>) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
-        self.with(<_>::prove()).transition()()
+        self.with(<_ as In<Online>>::prove())
+            .proven_transition()()
     }
 
     fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
@@ -127,7 +130,7 @@ impl Connectable for ConnectionViaTrait {
         self.transition()()
     }
 
-    fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str {
+    fn endpoint(self: &State<impl SRef, Self, impl In<Online>>) -> &str {
         &self.endpoint
     }
 
