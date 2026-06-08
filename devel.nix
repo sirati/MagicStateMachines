@@ -19,6 +19,7 @@ in
         toolchain.default.override {
           extensions = [
             "clippy"
+            "miri"
             "rust-src"
             "rustfmt"
           ];
