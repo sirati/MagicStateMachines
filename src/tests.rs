@@ -453,15 +453,13 @@ mod transition_effect_syntax {
     }
 
     #[test]
-    fn erased_union_transition_runs_shared_body_with_normal_transition() {
+    fn erased_union_transition_runs_concrete_body_with_normal_transition() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
         let connected = ready.transition()();
         let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
-        let online =
-            crate::undiscriminate_state(<Authenticated as InOnline>::into_enum(authenticated));
-        let ready: State<SOwned, _, Ready> = online
-            .with(<<_ as crate::StateMarker>::Kind as crate::StateKind>::prove())
-            .proven_transition()();
+        let online = <Authenticated as crate::In<Online>>::into_enum(authenticated);
+        let ready: State<SOwned, _, Ready> =
+            crate::undiscriminate_state(online.transitionExp2(Online)());
 
         assert_eq!(ready.value, 11);
     }
@@ -471,9 +469,7 @@ mod transition_effect_syntax {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
         let connected = ready.transition()();
         let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
-        let ready: State<SOwned, _, Ready> = authenticated
-            .with(<<_ as crate::StateMarker>::Kind as crate::StateKind>::prove())
-            .proven_transition()();
+        let ready: State<SOwned, _, Ready> = authenticated.transitionExp2(Online)();
 
         assert_eq!(ready.value, 11);
     }
@@ -483,7 +479,7 @@ mod transition_effect_syntax {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
         let connected = ready.transition()();
         let stopped: State<SOwned, _, Stopped> =
-            <Connected as InOnline>::into_enum(connected).transition_discriminated()();
+            <Connected as crate::In<Online>>::into_enum(connected).transition_discriminated()();
 
         assert_eq!(stopped.value, 2);
 
@@ -491,7 +487,8 @@ mod transition_effect_syntax {
         let connected = ready.transition()();
         let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
         let stopped: State<SOwned, _, Stopped> =
-            <Authenticated as InOnline>::into_enum(authenticated).transition_discriminated()();
+            <Authenticated as crate::In<Online>>::into_enum(authenticated)
+                .transition_discriminated()();
 
         assert_eq!(stopped.value, 21);
     }

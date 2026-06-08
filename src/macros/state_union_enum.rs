@@ -124,29 +124,6 @@ macro_rules! __StateUnionEnum {
             }
         }
 
-        impl<Storage, T> ::core::ops::Deref for $enum_name<Storage, T>
-        where
-            Storage: $crate::StateStorage,
-            T: $crate::StateMachineImpl,
-        {
-            type Target = $crate::__private::paste! {
-                $crate::State<
-                    $crate::SDiscriminated<Storage, [<$marker Discriminator>]>,
-                    T,
-                    $crate::StateUnionState<$marker>,
-                >
-            };
-
-            fn deref(&self) -> &Self::Target {
-                match self {
-                    Self::$first(state) => state,
-                    $(
-                        Self::$state(state) => state,
-                    )*
-                }
-            }
-        }
-
         #[allow(dead_code)]
         impl<Storage, T> $enum_name<Storage, T>
         where

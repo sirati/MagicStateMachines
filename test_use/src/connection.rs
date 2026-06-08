@@ -1,6 +1,6 @@
 use statemachines::{DiscriminatedState, In, SMut, SOwned, SRef, SResult, State};
 use test_def::{
-    AllMarker, ConnectionStandin, InAllMarker, InOnline, Online,
+    AllMarker, ConnectionStandin, InOnline, Online,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -20,15 +20,15 @@ statemachines::StateMachineImpl! {
         self.user = Some(user);
     }
 
-    // transition Connected => Disconnected() {
-    //     self.user = None;
-    // }
+    transition Connected => Disconnected() {
+        self.user = None;
+    }
 
-    // transition Authenticated => Disconnected(){
-    //     self.user = None;
-    // }
+    transition Authenticated => Disconnected(){
+        self.user = None;
+    }
 
-    transition Connected | Authenticated => Disconnected(),
+    // transition Connected | Authenticated => Disconnected(),
     transition Authenticated => Connected() {
         self.user = None;
     }
@@ -73,7 +73,8 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transition()(user.into())
+        self.transitionExp2(Connected)(user.into())
+        //self.transition()(user.into())
     }
 
     #[must_use]
@@ -107,7 +108,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.with(<_>::prove()).proven_transition()()
+        self.transitionExp2(Online)()
     }
 
     #[must_use]
@@ -115,7 +116,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.with(<_ as In<Online>>::prove()).proven_transition()()
+        self.transitionExp2(Online)()
     }
 
     #[must_use]
@@ -129,12 +130,11 @@ impl Connection {
     }
 
     pub(crate) fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str {
-        self.all_endpoint(); //this method must be InOnline not In<Online> in order to be able to call all_endpoint
-        &self.endpoint
+        &self.all_endpoint() //this method must be InOnline not In<Online> in order to be able to call all_endpoint
     }
 
     pub(crate) fn all_endpoint(self: &State<impl SRef, Self, impl In<AllMarker>>) -> &str {
-        &self.endpoint
+        &self.raw_endpoint()
     }
 
     pub(crate) fn raw_endpoint(&self) -> &str {

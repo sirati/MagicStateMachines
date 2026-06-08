@@ -127,6 +127,73 @@ macro_rules! StateMachineImpl {
         }
 
         #[allow(dead_code)]
+        trait __GenericStateMarkerTransitionExt<Storage, From>
+        where
+            Storage: $crate::StateStorage,
+        {
+            #[allow(non_snake_case)]
+            #[track_caller]
+            fn transitionExp2<Marker, To>(
+                self,
+                _marker: Marker,
+            ) -> $crate::KindProofTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                Marker,
+                To,
+                <Marker as $crate::StateMarker>::Kind,
+            >
+            where
+                From: $crate::StateTrait + $crate::In<Marker>,
+                Marker: $crate::StateMarker,
+                To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>;
+        }
+
+        impl<Storage, From> __GenericStateMarkerTransitionExt<Storage, From>
+            for $crate::State<Storage, $implementation, From>
+        where
+            Storage: $crate::StateStorage,
+            Storage::Machine<$implementation>: $crate::StateMachineImpl<
+                    Standin = $standin,
+                    Impl = $implementation,
+                    TransitionToken = __StateMachineTransitionToken,
+                >,
+        {
+            #[allow(non_snake_case)]
+            #[track_caller]
+            fn transitionExp2<Marker, To>(
+                self,
+                _marker: Marker,
+            ) -> $crate::KindProofTransitionCall<
+                Storage,
+                $implementation,
+                From,
+                Marker,
+                To,
+                <Marker as $crate::StateMarker>::Kind,
+            >
+            where
+                From: $crate::StateTrait + $crate::In<Marker>,
+                Marker: $crate::StateMarker,
+                To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            {
+                $crate::transition_state_with_kind_proof::<
+                    Storage,
+                    $implementation,
+                    From,
+                    Marker,
+                    To,
+                    <Marker as $crate::StateMarker>::Kind,
+                >(
+                    self.with(<From as $crate::In<Marker>>::prove()),
+                    __StateMachineTransitionToken(()),
+                )
+            }
+
+        }
+
+        #[allow(dead_code)]
         trait __GenericStateWithProofTransitionExt<Storage, From, Marker, To, Kind>
         where
             Storage: $crate::StateStorage,

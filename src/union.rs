@@ -1,6 +1,6 @@
 use crate::{
-    SMove, SMut, SRef, State, StateMachineImpl, StateMarker, StateStorage, StateTrait,
-    Transition, TransitionCallsite, TransitionProof, UnionStateKind,
+    SMove, SMut, SRef, State, StateMachineImpl, StateMarker, StateStorage, StateTrait, Transition,
+    TransitionCallsite, TransitionProof, UnionStateKind,
 };
 use core::any::Any;
 use core::marker::PhantomData;
@@ -55,8 +55,8 @@ where
 
     #[doc(hidden)]
     #[must_use]
-    fn prove<Storage, T, To>(
-    ) -> TransitionProof<Storage, T, Self, Marker, To, <Marker as StateMarker>::Kind>
+    fn prove<Storage, T, To>()
+    -> TransitionProof<Storage, T, Self, Marker, To, <Marker as StateMarker>::Kind>
     where
         Self: Sized,
         Storage: StateStorage,
@@ -411,8 +411,8 @@ where
     Marker: StateUnionDiscriminant<Discriminator = Discriminator>,
     Discriminator: Copy + 'static,
 {
-    state: DiscriminatedState<Storage, T, Marker>,
-    concrete: PhantomData<fn() -> (Concrete, Discriminator)>,
+    state: State<SDiscriminated<Storage, Discriminator>, T, Concrete>,
+    concrete: PhantomData<fn() -> (Concrete, Marker, Discriminator)>,
 }
 
 impl<Storage, T, Concrete, Marker, Discriminator>
@@ -426,7 +426,10 @@ where
     #[must_use]
     pub fn new(state: State<Storage, T, Concrete>, discriminator: Discriminator) -> Self {
         Self {
-            state: discriminate_state::<Storage, T, Concrete, Marker>(state, discriminator),
+            state: State::from_inner(DiscriminatedInner {
+                inner: state.inner,
+                discriminator,
+            }),
             concrete: PhantomData,
         }
     }
@@ -435,19 +438,25 @@ where
     #[must_use]
     pub fn from_erased(state: DiscriminatedState<Storage, T, Marker>) -> Self {
         Self {
-            state,
+            state: State::from_inner(DiscriminatedInner {
+                inner: Storage::retag(state.inner.inner),
+                discriminator: state.inner.discriminator,
+            }),
             concrete: PhantomData,
         }
     }
 
     #[must_use]
     pub fn into_state(self) -> State<Storage, T, Concrete> {
-        State::from_inner(Storage::retag(self.state.inner.inner))
+        State::from_inner(self.state.inner.inner)
     }
 
     #[must_use]
     pub fn into_erased(self) -> DiscriminatedState<Storage, T, Marker> {
-        self.state
+        State::from_inner(DiscriminatedInner {
+            inner: Storage::retag(self.state.inner.inner),
+            discriminator: self.state.inner.discriminator,
+        })
     }
 }
 
@@ -459,7 +468,7 @@ where
     Marker: StateUnionDiscriminant<Discriminator = Discriminator>,
     Discriminator: Copy + 'static,
 {
-    type Target = State<SDiscriminated<Storage, Discriminator>, T, StateUnionState<Marker>>;
+    type Target = State<SDiscriminated<Storage, Discriminator>, T, Concrete>;
 
     fn deref(&self) -> &Self::Target {
         &self.state

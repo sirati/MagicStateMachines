@@ -119,8 +119,7 @@ impl Connectable for ConnectionViaTrait {
     where
         S: SMut,
     {
-        self.with(<_ as In<Online>>::prove())
-            .proven_transition()()
+        self.transitionExp2(Online)()
     }
 
     fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>

@@ -356,15 +356,15 @@ where
     From: crate::StateTrait + crate::StateMarker + crate::In<Marker>,
     Marker: StateUnionDiscriminant
         + crate::StateMarker<Kind = UnionStateKind>
-        + StateUnionSharedTransitionEffect<T, To, Args>,
+        + StateUnionDiscriminatedTransition<T, To, Args>,
     Args: core::marker::Tuple,
     To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
 {
     type Output = State<Storage, T, To>;
 
-    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
-        Marker::apply(Storage::s_mut(&mut self.state.inner), args);
-        Storage::complete_transition_after_effect(self.state, self.callsite)
+    extern "rust-call" fn call_once(self, args: Args) -> Self::Output {
+        let state = <From as crate::In<Marker>>::into_enum(self.state);
+        Marker::transition(state, args, self.callsite)
     }
 }
 

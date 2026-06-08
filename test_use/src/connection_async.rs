@@ -81,8 +81,7 @@ impl ConnectionAsync {
     where
         S: SMut,
     {
-        self.with(<_ as In<Online>>::prove())
-            .proven_transition()()
+        self.transitionExp2(Online)()
     }
 
     pub(crate) async fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
