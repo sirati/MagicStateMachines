@@ -91,6 +91,7 @@ macro_rules! StateMachineImpl {
                 From: $crate::StateUnionConcreteState,
                 $standin: $crate::Transition<From, To>,
                 $implementation: $crate::TransitionEffectSelector<From, To>;
+
         }
 
         impl<Storage, From> __GenericStateTransitionExt<Storage, From>
@@ -122,8 +123,10 @@ macro_rules! StateMachineImpl {
             {
                 $crate::transition_state_with_effect(self, __StateMachineTransitionToken(()))
             }
+
         }
 
+        #[allow(dead_code)]
         impl $implementation {
             #[track_caller]
             fn transition<Storage, From, Marker, To>(

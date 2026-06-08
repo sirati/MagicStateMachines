@@ -85,8 +85,8 @@ impl Connection {
         S: SMut,
     {
         match user {
-            Some(user) => <Authenticated as InOnline>::into_enum(self.authenticate(user)),
-            None => <Connected as InOnline>::into_enum(self),
+            Some(user) => <_>::into_enum(self.authenticate(user)),
+            None => <_>::into_enum(self),
         }
     }
 
@@ -97,7 +97,7 @@ impl Connection {
     where
         S: SRef,
     {
-        <_ as InOnline>::into_enum(self)
+        <_>::into_enum(self)
     }
 
     #[must_use]

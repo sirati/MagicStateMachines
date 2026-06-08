@@ -9,6 +9,10 @@ macro_rules! __StateUnion {
             #[allow(dead_code)]
             pub struct $marker;
 
+            impl $crate::StateMarker for $marker {
+                type Kind = $crate::UnionStateKind;
+            }
+
             #[doc(hidden)]
             #[allow(dead_code)]
             mod [<__state_union_seal_ $marker:snake>] {
@@ -17,6 +21,9 @@ macro_rules! __StateUnion {
             }
 
             impl [<__state_union_seal_ $first_super:snake>]::Sealed
+                for $crate::StateUnionState<$marker>
+            {}
+            impl $crate::StateUnionProofMembership<$first_super>
                 for $crate::StateUnionState<$marker>
             {}
             impl $crate::StateUnionErased<$first_super>
@@ -42,6 +49,9 @@ macro_rules! __StateUnion {
                 impl [<__state_union_seal_ $supertrait:snake>]::Sealed
                     for $crate::StateUnionState<$marker>
                 {}
+                impl $crate::StateUnionProofMembership<$supertrait>
+                    for $crate::StateUnionState<$marker>
+                {}
                 impl $crate::StateUnionErased<$supertrait>
                     for $crate::StateUnionState<$marker>
                 {
@@ -60,8 +70,10 @@ macro_rules! __StateUnion {
             #[allow(dead_code)]
             pub trait [<In $marker>]:
                 $crate::StateTrait
+                + $crate::StateMarker
                 + [<__state_union_seal_ $marker:snake>]::Sealed
                 + $crate::StateUnionErased<$marker>
+                + $crate::StateUnionProofMembership<$marker>
                 + [<In $first_super>]
                 $(+ [<In $supertrait>])*
             {
@@ -69,6 +81,9 @@ macro_rules! __StateUnion {
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed
+                for $crate::StateUnionState<$marker>
+            {}
+            impl $crate::StateUnionProofMembership<$marker>
                 for $crate::StateUnionState<$marker>
             {}
             impl $crate::StateUnionErased<$marker>
@@ -81,6 +96,7 @@ macro_rules! __StateUnion {
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed for $first {}
+            impl $crate::StateUnionProofMembership<$marker> for $first {}
             impl $crate::StateUnionErased<$marker> for $first {
                 $crate::__StateUnion!(@erased_variant_impl $marker $first);
             }
@@ -93,6 +109,7 @@ macro_rules! __StateUnion {
 
             $(
                 impl [<__state_union_seal_ $marker:snake>]::Sealed for $state {}
+                impl $crate::StateUnionProofMembership<$marker> for $state {}
                 impl $crate::StateUnionErased<$marker> for $state {
                     $crate::__StateUnion!(@erased_variant_impl $marker $state);
                 }
@@ -158,6 +175,10 @@ macro_rules! __StateUnion {
             #[allow(dead_code)]
             pub struct $marker;
 
+            impl $crate::StateMarker for $marker {
+                type Kind = $crate::UnionStateKind;
+            }
+
             #[doc(hidden)]
             #[allow(dead_code)]
             mod [<__state_union_seal_ $marker:snake>] {
@@ -168,13 +189,18 @@ macro_rules! __StateUnion {
             #[allow(dead_code)]
             pub trait [<In $marker>]:
                 $crate::StateTrait
+                + $crate::StateMarker
                 + [<__state_union_seal_ $marker:snake>]::Sealed
                 + $crate::StateUnionErased<$marker>
+                + $crate::StateUnionProofMembership<$marker>
             {
                 $crate::__StateUnion!(@into_enum_method $marker);
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed
+                for $crate::StateUnionState<$marker>
+            {}
+            impl $crate::StateUnionProofMembership<$marker>
                 for $crate::StateUnionState<$marker>
             {}
             impl $crate::StateUnionErased<$marker>
@@ -187,6 +213,7 @@ macro_rules! __StateUnion {
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed for $first {}
+            impl $crate::StateUnionProofMembership<$marker> for $first {}
             impl $crate::StateUnionErased<$marker> for $first {
                 $crate::__StateUnion!(@erased_variant_impl $marker $first);
             }
@@ -199,6 +226,7 @@ macro_rules! __StateUnion {
 
             $(
                 impl [<__state_union_seal_ $marker:snake>]::Sealed for $state {}
+                impl $crate::StateUnionProofMembership<$marker> for $state {}
                 impl $crate::StateUnionErased<$marker> for $state {
                     $crate::__StateUnion!(@erased_variant_impl $marker $state);
                 }
@@ -384,10 +412,12 @@ macro_rules! __StateUnion {
         #[must_use]
         fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
         where
-            Self: Sized,
+            Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
             T: $crate::StateMachineImpl,
-            To: $crate::StateTrait,
-            $marker: $crate::StateUnionSharedEffect<T, To>;
+            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            $marker: $crate::StateUnionSharedEffect<T, To>
+                + $crate::StateMarker<Kind = $crate::UnionStateKind>;
+
     };
     (@erased_identity_impl $marker:ident) => {
         fn into_union_erased<Storage, T>(
@@ -498,10 +528,11 @@ macro_rules! __StateUnion {
 
         fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
         where
-            Self: Sized,
+            Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
             T: $crate::StateMachineImpl,
-            To: $crate::StateTrait,
-            $marker: $crate::StateUnionSharedEffect<T, To>,
+            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            $marker: $crate::StateUnionSharedEffect<T, To>
+                + $crate::StateMarker<Kind = $crate::UnionStateKind>,
         {
             $crate::StateUnionTransitionProof::new()
         }
@@ -525,10 +556,11 @@ macro_rules! __StateUnion {
 
         fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
         where
-            Self: Sized,
+            Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
             T: $crate::StateMachineImpl,
-            To: $crate::StateTrait,
-            $marker: $crate::StateUnionSharedEffect<T, To>,
+            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            $marker: $crate::StateUnionSharedEffect<T, To>
+                + $crate::StateMarker<Kind = $crate::UnionStateKind>,
         {
             $crate::StateUnionTransitionProof::new()
         }
@@ -569,10 +601,11 @@ macro_rules! __StateUnion {
 
         fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $target, To>
         where
-            Self: Sized,
+            Self: Sized + $crate::UnionTransitionProof<T, $target, To>,
             T: $crate::StateMachineImpl,
-            To: $crate::StateTrait,
-            $target: $crate::StateUnionSharedEffect<T, To>,
+            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            $target: $crate::StateUnionSharedEffect<T, To>
+                + $crate::StateMarker<Kind = $crate::UnionStateKind>,
         {
             $crate::StateUnionTransitionProof::new()
         }

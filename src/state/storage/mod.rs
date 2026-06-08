@@ -2,8 +2,8 @@ mod owned;
 
 use crate::{
     DiscriminatedState, Initial, StateMachineImpl, StateUnionDiscriminant,
-    StateUnionDiscriminatedTransition, StateUnionErased, StateUnionSharedEffect,
-    StateUnionSharedTransitionEffect, StateUnionTransitionProof, Transition,
+    StateUnionDiscriminatedTransition, StateUnionErased, StateUnionProofTarget,
+    StateUnionSharedEffect, StateUnionSharedTransitionEffect, StateUnionTransitionProof, Transition,
 };
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -451,6 +451,43 @@ where
     }
 }
 
+/// Binds a generated union-transition proof selected by the target state.
+#[doc(hidden)]
+#[must_use]
+pub fn proven_state<To, Storage, T, S>(
+    state: State<Storage, T, S>,
+) -> StateUnionProvenState<Storage, T, S, <To as StateUnionProofTarget<T, S>>::Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: StateUnionErased<<To as StateUnionProofTarget<T, S>>::Marker>,
+    To: StateUnionProofTarget<T, S>,
+{
+    StateUnionProvenState {
+        state,
+        marker: PhantomData,
+    }
+}
+
+/// Binds a generated union-transition proof selected by a union marker.
+#[doc(hidden)]
+#[must_use]
+pub fn proven_union_state<Marker, To, Storage, T, S>(
+    state: State<Storage, T, S>,
+) -> StateUnionProvenState<Storage, T, S, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: StateUnionErased<Marker>,
+    Marker: StateUnionSharedEffect<T, To>,
+    To: crate::StateTrait,
+{
+    StateUnionProvenState {
+        state,
+        marker: PhantomData,
+    }
+}
+
 impl<Storage, T, S> State<Storage, T, S>
 where
     T: StateMachineImpl,
@@ -468,13 +505,14 @@ where
     #[must_use]
     pub fn with<Marker, To>(
         self,
-        _proof: StateUnionTransitionProof<T, S, Marker, To>,
+        proof: StateUnionTransitionProof<T, S, Marker, To>,
     ) -> StateUnionProvenState<Storage, T, S, Marker, To>
     where
-        S: StateUnionErased<Marker>,
-        Marker: StateUnionSharedEffect<T, To>,
-        To: crate::StateTrait,
+        S: StateUnionErased<Marker> + crate::UnionTransitionProof<T, Marker, To>,
+        Marker: StateUnionSharedEffect<T, To> + crate::StateMarker<Kind = crate::UnionStateKind>,
+        To: crate::StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
     {
+        proof.bind(&self);
         StateUnionProvenState {
             state: self,
             marker: PhantomData,

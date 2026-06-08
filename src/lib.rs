@@ -17,6 +17,7 @@
 
 mod contract;
 mod decomposed;
+mod marker;
 mod macros;
 mod policy;
 mod shared;
@@ -29,6 +30,7 @@ mod union;
 
 pub use contract::{Initial, StateMachineImpl, Transition};
 pub use decomposed::{DecomposedData, DecomposedState, RecomposeError};
+pub use marker::{ConcreteStateKind, StateKind, StateMarker, UnionStateKind};
 pub use policy::{StateClone, StateCopy};
 pub use shared::{
     MutexStorage, RefCellStorage, RwLockStorage, SArc, SArcMutex, SArcRwLock, SMutView, SMutex,
@@ -42,9 +44,9 @@ pub use state::{
     StateUnionProofTransitionCall, StateUnionProvenState, StorageStateOwned, StorageStateOwnedBox,
     StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, TransitionCall,
     TransitionCallsite, TransitionEffect, TransitionEffectSelector,
-    complete_transition_after_effect, transition, transition_callsite,
-    transition_concrete_after_effect, transition_discriminated_state, transition_state,
-    transition_state_with_effect, transition_state_with_union_proof,
+    complete_transition_after_effect, proven_state, proven_union_state, transition,
+    transition_callsite, transition_concrete_after_effect, transition_discriminated_state,
+    transition_state, transition_state_with_effect, transition_state_with_union_proof,
 };
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]
@@ -54,12 +56,15 @@ pub use union::StateUnionConcreteState;
 #[doc(hidden)]
 pub use union::StateUnionDiscriminatedTransition;
 #[doc(hidden)]
+pub use marker::UnionTransitionProof;
+#[doc(hidden)]
 pub use union::{
-    DiscriminatedInner, SDiscriminated, StateUnionErased, StateUnionMember, StateUnionRuntime,
-    StateUnionSharedEffect, StateUnionSharedTransitionEffect, StateUnionState,
-    StateUnionTransition, StateUnionTransitionProof, StateUnionVariant,
-    concretize_discriminated_state, discriminate_state, discriminated_state_discriminator,
-    rediscriminate_union_state, state_union_discriminator, undiscriminate_state,
+    DiscriminatedInner, SDiscriminated, StateUnionErased, StateUnionMember,
+    StateUnionProofMembership, StateUnionProofTarget, StateUnionRuntime, StateUnionSharedEffect,
+    StateUnionSharedTransitionEffect, StateUnionState, StateUnionTransition,
+    StateUnionTransitionProof, StateUnionVariant, concretize_discriminated_state,
+    discriminate_state, discriminated_state_discriminator, rediscriminate_union_state,
+    state_union_discriminator, undiscriminate_state,
 };
 pub use union::{DiscriminatedState, StateUnionDiscriminant};
 

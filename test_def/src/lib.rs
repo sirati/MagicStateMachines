@@ -8,9 +8,11 @@ pub struct ConnectionStandin;
 
 /// States owned by the definition crate.
 pub mod states {
-    pub struct Disconnected;
-    pub struct Connected;
-    pub struct Authenticated;
+    statemachines::States! {
+        Disconnected;
+        Connected;
+        Authenticated;
+    }
 }
 
 use states::{Authenticated, Connected, Disconnected};
@@ -46,3 +48,7 @@ StateMachineDefinition! {
 
 // // The enum-only form remains independent of marker traits
 // StateUnion!(enum OnlineValue: Connected | Authenticated);
+
+
+
+//impl<T, U> UnionTransition<Online, U> for T where T: Transition<Connected, U> +   Transition<Authenticated, U> {...}

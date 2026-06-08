@@ -14,7 +14,9 @@ use std::sync::{TryLockError, UniqueArc};
 
 struct Machine;
 struct Ready;
-pub struct Running;
+crate::States! {
+    Running;
+}
 
 crate::StateUnion!(Active: Running);
 
@@ -381,10 +383,12 @@ mod transition_effect_syntax {
     use crate::{Initial, SOwned, State, Transition};
 
     struct Machine;
-    pub struct Ready;
-    pub struct Connected;
-    pub struct Authenticated;
-    pub struct Stopped;
+    crate::States! {
+        Ready;
+        Connected;
+        Authenticated;
+        Stopped;
+    }
 
     struct Runtime {
         value: u32,

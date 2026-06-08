@@ -8,7 +8,7 @@ pub use storage::{
     StateUnionProofTransitionCall, StateUnionProvenState, StorageStateOwned, StorageStateOwnedBox,
     StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc,
     TransitionCallsite, TransitionEffect, TransitionEffectSelector,
-    complete_transition_after_effect, transition_callsite, transition_concrete_after_effect,
-    transition_discriminated_state, transition_state, transition_state_with_effect,
-    transition_state_with_union_proof,
+    complete_transition_after_effect, proven_state, proven_union_state, transition_callsite,
+    transition_concrete_after_effect, transition_discriminated_state, transition_state,
+    transition_state_with_effect, transition_state_with_union_proof,
 };
