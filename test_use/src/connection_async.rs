@@ -5,7 +5,7 @@ use core::{
 };
 use statemachines::{DiscriminatedState, SMut, SOwned, SRef, State};
 use test_def::{
-    ConnectionStandin, InOnline, Online, OnlineIntoEnum,
+    ConnectionStandin, InOnline, Online,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -117,21 +117,19 @@ impl ConnectionAsync {
         S: SMut,
     {
         match user {
-            Some(user) => {
-                <Authenticated as OnlineIntoEnum>::into_enum(self.authenticate(user).await)
-            }
-            None => <Connected as OnlineIntoEnum>::into_enum(self),
+            Some(user) => <Authenticated as InOnline>::into_enum(self.authenticate(user).await),
+            None => <Connected as InOnline>::into_enum(self),
         }
     }
 
     #[must_use]
     pub(crate) fn as_online_enum<S>(
-        self: State<S, Self, impl OnlineIntoEnum>,
+        self: State<S, Self, impl InOnline>,
     ) -> DiscriminatedState<S, Self, Online>
     where
         S: SRef,
     {
-        OnlineIntoEnum::into_enum(self)
+        InOnline::into_enum(self)
     }
 
     pub(crate) async fn disconnect<S>(

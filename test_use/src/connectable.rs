@@ -1,6 +1,6 @@
 use statemachines::{DiscriminatedState, SMut, SOwned, SRef, State, StateMachineImpl};
 use test_def::{
-    ConnectionStandin, InOnline, Online, OnlineIntoEnum,
+    ConnectionStandin, InOnline, Online,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -47,19 +47,17 @@ pub(crate) trait Connectable:
         S: SMut,
     {
         match user {
-            Some(user) => <Authenticated as OnlineIntoEnum>::into_enum(self.authenticate(user)),
-            None => <Connected as OnlineIntoEnum>::into_enum(self),
+            Some(user) => <Authenticated as InOnline>::into_enum(self.authenticate(user)),
+            None => <Connected as InOnline>::into_enum(self),
         }
     }
 
     #[must_use]
-    fn as_online_enum<S>(
-        self: State<S, Self, impl OnlineIntoEnum>,
-    ) -> DiscriminatedState<S, Self, Online>
+    fn as_online_enum<S>(self: State<S, Self, impl InOnline>) -> DiscriminatedState<S, Self, Online>
     where
         S: SRef,
     {
-        <_ as OnlineIntoEnum>::into_enum(self)
+        <_ as InOnline>::into_enum(self)
     }
 
     fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str;

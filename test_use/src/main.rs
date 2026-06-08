@@ -25,7 +25,7 @@ mod tests {
     use super::connectable::{Connectable, ConnectionViaTrait};
     use super::connection::Connection;
     use super::connection_async::ConnectionAsync;
-    use test_def::{Online, OnlineDiscriminator, OnlineEnum, OnlineIntoEnum};
+    use test_def::{InOnline, Online, OnlineDiscriminator, OnlineEnum};
 
     fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
         let mut future = pin!(future);
@@ -119,10 +119,12 @@ mod tests {
     }
 
     #[test]
-    fn online_enum_is_online_into_enum() {
-        fn assert_online_into_enum<T: OnlineIntoEnum>() {}
+    fn online_members_are_in_online() {
+        fn assert_in_online<T: InOnline>() {}
 
-        assert_online_into_enum::<OnlineEnum<statemachines::SOwned, Connection>>();
+        assert_in_online::<test_def::states::Connected>();
+        assert_in_online::<test_def::states::Authenticated>();
+        assert_in_online::<statemachines::StateUnionState<Online>>();
     }
 
     #[test]
