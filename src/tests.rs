@@ -449,12 +449,13 @@ mod transition_effect_syntax {
     }
 
     #[test]
-    fn discriminated_union_transition_runs_shared_body_when_bodies_are_shared() {
+    fn erased_union_transition_runs_shared_body_with_normal_transition() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
         let connected = ready.transition()();
         let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
-        let ready: State<SOwned, _, Ready> =
-            <Authenticated as InOnline>::into_enum(authenticated).transition_discriminated()();
+        let online =
+            crate::undiscriminate_state(<Authenticated as InOnline>::into_enum(authenticated));
+        let ready: State<SOwned, _, Ready> = online.transition()();
 
         assert_eq!(ready.value, 11);
     }

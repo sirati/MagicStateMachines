@@ -295,6 +295,26 @@ pub trait StateUnionTransition<Standin, To> {
     type F;
 }
 
+/// Selects the implementation effect shared by every member of a generated state union.
+#[doc(hidden)]
+pub trait StateUnionSharedEffect<T, To>: StateUnionDiscriminant
+where
+    T: StateMachineImpl,
+    To: StateTrait,
+{
+    type Effect;
+}
+
+/// Applies the shared implementation effect for an erased union state.
+#[doc(hidden)]
+pub trait StateUnionSharedTransitionEffect<T, To, Args>: StateUnionSharedEffect<T, To>
+where
+    T: StateMachineImpl,
+    To: StateTrait,
+{
+    fn apply(value: &mut T, args: Args);
+}
+
 /// Dispatches a discriminated union transition to the concrete state's effect.
 #[doc(hidden)]
 pub trait StateUnionDiscriminatedTransition<T, To, Args>: StateUnionDiscriminant

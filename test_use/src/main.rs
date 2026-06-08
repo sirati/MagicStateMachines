@@ -4,12 +4,13 @@
 mod connectable;
 mod connection;
 mod connection_async;
+mod connection_async_usage;
 mod custom_backend;
 mod owned;
 
 fn main() {
     owned::run();
-    connection_async::run();
+    connection_async_usage::run();
     connectable::run();
     custom_backend::run();
 }

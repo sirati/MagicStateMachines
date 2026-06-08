@@ -36,6 +36,39 @@ macro_rules! StateMachineImpl {
             $($transitions)*
         );
 
+        #[doc(hidden)]
+        pub struct __StateMachineUnionTransitionEffect<Marker, To>(
+            ::core::marker::PhantomData<fn() -> (Marker, To)>,
+        );
+
+        impl<Marker, To> $crate::TransitionEffectSelector<$crate::StateUnionState<Marker>, To>
+            for $implementation
+        where
+            Marker: $crate::StateUnionSharedEffect<$implementation, To>,
+            To: $crate::StateTrait,
+        {
+            type Effect = __StateMachineUnionTransitionEffect<Marker, To>;
+        }
+
+        impl<Marker, To, Args> $crate::TransitionEffect<
+            $implementation,
+            $crate::StateUnionState<Marker>,
+            To,
+            Args,
+        > for __StateMachineUnionTransitionEffect<Marker, To>
+        where
+            Marker: $crate::StateUnionSharedTransitionEffect<$implementation, To, Args>,
+            To: $crate::StateTrait,
+        {
+            fn apply(value: &mut $implementation, args: Args) {
+                <Marker as $crate::StateUnionSharedTransitionEffect<
+                    $implementation,
+                    To,
+                    Args,
+                >>::apply(value, args);
+            }
+        }
+
         #[allow(dead_code)]
         trait __GenericStateTransitionExt<Storage, From>
         where

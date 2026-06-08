@@ -107,7 +107,8 @@ impl Connection {
     where
         S: SMut,
     {
-        <_ as InOnline>::into_enum(self).transition_discriminated()()
+        <_>::into_enum(self).transition_discriminated()()
+        //statemachines::undiscriminate_state(<_>::into_enum(self)).transition()()
     }
 
     #[must_use]
@@ -115,7 +116,7 @@ impl Connection {
     where
         S: SMut,
     {
-        <_ as InOnline>::into_enum(self).transition_discriminated()()
+        statemachines::undiscriminate_state(<_>::into_enum(self)).transition()()
     }
 
     #[must_use]

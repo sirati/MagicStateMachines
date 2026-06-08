@@ -1,8 +1,3 @@
-use core::{
-    future::Future,
-    pin::pin,
-    task::{Context, Poll, Waker},
-};
 use statemachines::{DiscriminatedState, SMut, SOwned, SRef, State};
 use test_def::{
     ConnectionStandin, InOnline, Online,
@@ -14,18 +9,6 @@ use test_def::{
 pub(crate) struct ConnectionAsync {
     endpoint: String,
     user: Option<String>,
-}
-
-fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
-    let mut future = pin!(future);
-    let mut context = Context::from_waker(Waker::noop());
-
-    loop {
-        match future.as_mut().poll(&mut context) {
-            Poll::Ready(output) => return output,
-            Poll::Pending => core::hint::spin_loop(),
-        }
-    }
 }
 
 statemachines::StateMachineImpl! {
@@ -41,46 +24,6 @@ statemachines::StateMachineImpl! {
     transition Authenticated => Connected() {
         self.user = None;
     }
-}
-
-pub(crate) fn run() {
-    let authenticated = block_on(async {
-        ConnectionAsync::new("localhost:8085")
-            .connect()
-            .await
-            .authenticate("bob")
-            .await
-    });
-
-    println!(
-        "{} is asynchronously authenticated as {}",
-        authenticated.endpoint(),
-        authenticated.user()
-    );
-
-    let online = block_on(async { authenticated.logout().await.authenticate_if(None).await });
-    println!("{} is asynchronously online", online.endpoint());
-
-    let disconnected = block_on(online.disconnect());
-    println!(
-        "{} is asynchronously disconnected",
-        disconnected.raw_endpoint()
-    );
-
-    let online = block_on(async {
-        let c = ConnectionAsync::new("localhost:8086");
-        let c = c.connect();
-        let c = c.await;
-        let c = c.as_online_enum();
-        let c = c.as_online_enum();
-        c
-    });
-    // use test_def::OnlineEnum::*;
-    // match online {
-    //     Connected(s) => {}
-    //     Authenticated(s) => todo!(),
-    // }
-    println!("{} is asynchronously online via enum", online.endpoint());
 }
 
 impl ConnectionAsync {
@@ -138,7 +81,7 @@ impl ConnectionAsync {
     where
         S: SMut,
     {
-        <_>::into_enum(self).transition_discriminated()()
+        statemachines::undiscriminate_state(<_ as InOnline>::into_enum(self)).transition()()
     }
 
     pub(crate) async fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>

@@ -117,7 +117,7 @@ impl Connectable for ConnectionViaTrait {
     where
         S: SMut,
     {
-        <_ as InOnline>::into_enum(self).transition_discriminated()()
+        statemachines::undiscriminate_state(<_ as InOnline>::into_enum(self)).transition()()
     }
 
     fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>

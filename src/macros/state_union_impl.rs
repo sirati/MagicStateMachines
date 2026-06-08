@@ -120,6 +120,11 @@ macro_rules! __StateUnion {
             }
 
             $crate::__StateUnion!(
+                @shared_effect $marker:
+                $first $(| $state)*
+            );
+
+            $crate::__StateUnion!(
                 @discriminated_transition $marker:
                 $first $(| $state)*
             );
@@ -221,6 +226,11 @@ macro_rules! __StateUnion {
             }
 
             $crate::__StateUnion!(
+                @shared_effect $marker:
+                $first $(| $state)*
+            );
+
+            $crate::__StateUnion!(
                 @discriminated_transition $marker:
                 $first $(| $state)*
             );
@@ -313,6 +323,51 @@ macro_rules! __StateUnion {
                         )*
                     }
                 }
+            }
+        }
+    };
+    (
+        @shared_effect $marker:ident:
+        $first:ident $(| $state:ident)*
+    ) => {
+        impl<T, To> $crate::StateUnionSharedEffect<T, To> for $marker
+        where
+            T: $crate::StateMachineImpl
+                + $crate::TransitionEffectSelector<$first, To>,
+            To: $crate::StateTrait,
+            $marker: $crate::StateUnionTransition<T::Standin, To>,
+            $(
+                T: $crate::TransitionEffectSelector<
+                    $state,
+                    To,
+                    Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
+                >,
+            )*
+        {
+            type Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect;
+        }
+
+        impl<T, To, Args> $crate::StateUnionSharedTransitionEffect<T, To, Args>
+            for $marker
+        where
+            T: $crate::StateMachineImpl
+                + $crate::TransitionEffectSelector<$first, To>,
+            To: $crate::StateTrait,
+            $marker: $crate::StateUnionSharedEffect<
+                T,
+                To,
+                Effect = <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
+            >,
+            <T as $crate::TransitionEffectSelector<$first, To>>::Effect:
+                $crate::TransitionEffect<T, $first, To, Args>,
+        {
+            fn apply(value: &mut T, args: Args) {
+                <<T as $crate::TransitionEffectSelector<$first, To>>::Effect as $crate::TransitionEffect<
+                    T,
+                    $first,
+                    To,
+                    Args,
+                >>::apply(value, args);
             }
         }
     };

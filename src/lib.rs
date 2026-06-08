@@ -55,9 +55,10 @@ pub use union::StateUnionDiscriminatedTransition;
 #[doc(hidden)]
 pub use union::{
     DiscriminatedInner, SDiscriminated, StateUnionErased, StateUnionMember, StateUnionRuntime,
-    StateUnionState, StateUnionTransition, StateUnionVariant, concretize_discriminated_state,
-    discriminate_state, discriminated_state_discriminator, rediscriminate_union_state,
-    state_union_discriminator, undiscriminate_state,
+    StateUnionSharedEffect, StateUnionSharedTransitionEffect, StateUnionState,
+    StateUnionTransition, StateUnionVariant, concretize_discriminated_state, discriminate_state,
+    discriminated_state_discriminator, rediscriminate_union_state, state_union_discriminator,
+    undiscriminate_state,
 };
 pub use union::{DiscriminatedState, StateUnionDiscriminant};
 
