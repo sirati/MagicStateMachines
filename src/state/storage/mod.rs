@@ -5,11 +5,17 @@ use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "tracing")]
 use core::panic::Location;
+use core::pin::Pin;
+use std::rc::UniqueRc;
+use std::sync::UniqueArc;
 
 pub use owned::{
     SOwned, StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox,
     StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc,
 };
+
+pub type SBox<T, S> = State<StorageStateOwnedBox, T, S>;
+pub type SPinBox<T, S> = State<StorageStateOwnedPinBox, T, S>;
 
 fn retag_owned<T, From, To>(inner: crate::StateOwned<T, From>) -> crate::StateOwned<T, To> {
     crate::StateOwned {
@@ -281,29 +287,135 @@ where
 impl<Storage, T, S> State<Storage, T, S>
 where
     T: StateMachineImpl,
-    Storage: StateStorageNew,
-{
-    /// Wraps an implementation in a state declared initial by its definition.
-    #[must_use]
-    pub fn new(value: T) -> Self
-    where
-        <Storage::Machine<T> as StateMachineImpl>::Standin: Initial<S>,
-    {
-        Self {
-            inner: Storage::new(value),
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<Storage, T, S> State<Storage, T, S>
-where
-    T: StateMachineImpl,
     Storage: StateStorage,
 {
     pub(crate) fn from_inner(inner: Storage::Inner<T, S>) -> Self {
         Self {
             inner,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T, S> State<StorageStateOwned, T, S>
+where
+    T: StateMachineImpl,
+{
+    /// Wraps an implementation in an initial directly owned state.
+    #[must_use]
+    pub fn new(value: T) -> Self
+    where
+        T::Standin: Initial<S>,
+    {
+        State {
+            inner: <StorageStateOwned as StateStorageNew>::new(value),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T, S> State<StorageStateOwnedBox, T, S>
+where
+    T: StateMachineImpl,
+{
+    /// Moves a directly owned state into `Box` storage without changing its state.
+    #[must_use]
+    pub fn new(state: State<StorageStateOwned, T, S>) -> Self {
+        State {
+            inner: crate::StateOwned {
+                value: Box::new(state.inner.value),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
+            marker: PhantomData,
+        }
+    }
+
+    /// Moves this boxed state back into direct owned storage.
+    #[must_use]
+    pub fn unbox(state: Self) -> State<StorageStateOwned, T, S> {
+        State {
+            inner: crate::StateOwned {
+                value: *state.inner.value,
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T, S> State<StorageStateOwnedPinBox, T, S>
+where
+    T: StateMachineImpl,
+{
+    /// Pins an already boxed state in place without changing its state.
+    #[must_use]
+    pub fn new(state: State<StorageStateOwnedBox, T, S>) -> Self {
+        State {
+            inner: crate::StateOwned {
+                value: Box::into_pin(state.inner.value),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
+            marker: PhantomData,
+        }
+    }
+
+    /// Converts pinned box storage back to box storage when the runtime is `Unpin`.
+    #[must_use]
+    pub fn into_boxed(state: Self) -> State<StorageStateOwnedBox, T, S>
+    where
+        T: Unpin,
+    {
+        State {
+            inner: crate::StateOwned {
+                value: Pin::into_inner(state.inner.value),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T, S> State<StorageStateOwnedUniqueRc, T, S>
+where
+    T: StateMachineImpl,
+{
+    /// Moves a directly owned state into `UniqueRc` storage without changing its state.
+    #[must_use]
+    pub fn new(state: State<StorageStateOwned, T, S>) -> Self {
+        State {
+            inner: crate::StateOwned {
+                value: UniqueRc::new(state.inner.value),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T, S> State<StorageStateOwnedUniqueArc, T, S>
+where
+    T: StateMachineImpl,
+{
+    /// Moves a directly owned state into `UniqueArc` storage without changing its state.
+    #[must_use]
+    pub fn new(state: State<StorageStateOwned, T, S>) -> Self {
+        State {
+            inner: crate::StateOwned {
+                value: UniqueArc::new(state.inner.value),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
             marker: PhantomData,
         }
     }

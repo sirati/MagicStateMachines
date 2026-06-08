@@ -1,8 +1,8 @@
 use crate::{
-    Initial, MutexState, RefCellState, SMove, SOwned, SharedStateError, State, StateCopy,
-    StateMachineImpl, StateOwned, StateUnionState, StorageStateOwnedBox, StorageStateOwnedPinBox,
-    StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, Transition, transition,
-    transition_state,
+    Initial, SArcMutex, SBox, SMove, SOwned, SPinBox, SRcRefCell, SharedStateError, State,
+    StateCopy, StateMachineImpl, StateOwned, StateUnionState, StorageStateOwnedBox,
+    StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, Transition,
+    transition, transition_state,
 };
 use core::marker::PhantomData;
 #[cfg(not(feature = "tracing"))]
@@ -75,21 +75,42 @@ fn generic_state_preserves_storage_across_transitions() {
     let ready = State::<SOwned, _, Ready>::new(Runtime);
     let _: State<SOwned, Runtime, Running> = transition_state(ready, TransitionToken)();
 
-    let ready = State::<StorageStateOwnedBox, _, Ready>::new(Runtime);
+    let ready = SBox::new(State::<SOwned, _, Ready>::new(Runtime));
     let _: State<StorageStateOwnedBox, Runtime, Running> =
         transition_state(ready, TransitionToken)();
 
-    let ready = State::<StorageStateOwnedPinBox, _, Ready>::new(Runtime);
+    let ready = SPinBox::new(SBox::new(State::<SOwned, _, Ready>::new(Runtime)));
     let _: State<StorageStateOwnedPinBox, Runtime, Running> =
         transition_state(ready, TransitionToken)();
 
-    let ready = State::<StorageStateOwnedUniqueRc, _, Ready>::new(Runtime);
+    let ready =
+        State::<StorageStateOwnedUniqueRc, _, Ready>::new(State::<SOwned, _, Ready>::new(Runtime));
     let _: State<StorageStateOwnedUniqueRc, Runtime, Running> =
         transition_state(ready, TransitionToken)();
 
-    let ready = State::<StorageStateOwnedUniqueArc, _, Ready>::new(Runtime);
+    let ready =
+        State::<StorageStateOwnedUniqueArc, _, Ready>::new(State::<SOwned, _, Ready>::new(Runtime));
     let _: State<StorageStateOwnedUniqueArc, Runtime, Running> =
         transition_state(ready, TransitionToken)();
+}
+
+#[test]
+fn owned_state_can_change_box_container() {
+    let ready = State::<SOwned, _, Ready>::new(Runtime);
+    let boxed: SBox<Runtime, Ready> = SBox::new(ready);
+    let running: State<StorageStateOwnedBox, Runtime, Running> =
+        transition_state(boxed, TransitionToken)();
+    let _running: State<SOwned, Runtime, Running> = SBox::unbox(running);
+}
+
+#[test]
+fn boxed_state_can_be_pinned_in_place() {
+    let ready = SBox::new(State::<SOwned, _, Ready>::new(Runtime));
+    let pinned: SPinBox<Runtime, Ready> = SPinBox::new(ready);
+    let running: State<StorageStateOwnedPinBox, Runtime, Running> =
+        transition_state(pinned, TransitionToken)();
+    let boxed: SBox<Runtime, Running> = SPinBox::into_boxed(running);
+    let _running: State<SOwned, Runtime, Running> = SBox::unbox(boxed);
 }
 
 #[test]
@@ -184,7 +205,7 @@ fn clone_policy_can_allow_clone_without_copy() {
 
 #[test]
 fn rc_state_guard_commits_transition_on_drop() {
-    let state = RefCellState::new::<Ready>(SharedRuntime { value: 1 });
+    let state = SRcRefCell::new::<Ready>(SharedRuntime { value: 1 });
     let alias = state.clone();
 
     let mut guard = state.borrow_mut::<Ready>().expect("initial state");
@@ -208,7 +229,7 @@ fn rc_state_guard_commits_transition_on_drop() {
 
 #[test]
 fn rc_state_borrows_committed_state_through_erased_union() {
-    let state = RefCellState::new::<Ready>(SharedRuntime { value: 10 });
+    let state = SRcRefCell::new::<Ready>(SharedRuntime { value: 10 });
     let alias = state.clone();
 
     let guard = state.borrow_mut::<Ready>().expect("initial state");
@@ -234,7 +255,7 @@ fn rc_state_borrows_committed_state_through_erased_union() {
 
 #[test]
 fn arc_state_guard_commits_transition_on_drop() {
-    let state = MutexState::new::<Ready>(SharedRuntime { value: 4 });
+    let state = SArcMutex::new::<Ready>(SharedRuntime { value: 4 });
     let alias = state.clone();
 
     let guard = state.borrow_mut::<Ready>().expect("initial state");
@@ -350,8 +371,7 @@ mod transition_effect_syntax {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
         let connected = ready.transition()();
         let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
-        let online = <Authenticated as InOnline>::into_erased(authenticated);
-        let ready: State<SOwned, _, Ready> = online.transition()();
+        let ready: State<SOwned, _, Ready> = authenticated.transition_erased::<Online, _>()();
 
         assert_eq!(ready.value, 11);
     }

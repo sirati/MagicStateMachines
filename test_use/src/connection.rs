@@ -1,6 +1,6 @@
 use statemachines::{SMut, SOwned, SRef, SResult, State};
 use test_def::{
-    ConnectionStandin, InOnline, OnlineEnum, OnlineIntoEnum,
+    ConnectionStandin, InOnline, Online, OnlineEnum, OnlineIntoEnum,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -20,30 +20,27 @@ statemachines::StateMachineImpl! {
         self.user = Some(user);
     }
 
-    transition Connected => Disconnected() {
-        self.user = None;
-    }
+    // transition Connected => Disconnected() {
+    //     self.user = None;
+    // }
 
-    transition Authenticated => Disconnected() {
-        self.user = None;
-    }
+    // transition Authenticated => Disconnected(){
+    //     self.user = None;
+    // }
 
+    transition Connected | Authenticated => Disconnected(),
     transition Authenticated => Connected() {
         self.user = None;
     }
 }
 
 impl Connection {
-    pub(crate) fn new(endpoint: impl Into<String>) -> Self {
-        Self {
+    #[must_use]
+    pub(crate) fn new(endpoint: impl Into<String>) -> State<SOwned, Self, Disconnected> {
+        State::<SOwned, Self, Disconnected>::new(Self {
             endpoint: endpoint.into(),
             user: None,
-        }
-    }
-
-    #[must_use]
-    pub(crate) fn disconnected(endpoint: impl Into<String>) -> State<SOwned, Self, Disconnected> {
-        State::new(Self::new(endpoint))
+        })
     }
 
     #[must_use]
@@ -112,7 +109,7 @@ impl Connection {
         Current: InOnline,
         ConnectionStandin: statemachines::Transition<Current, Disconnected, F = fn()>,
     {
-        <_ as InOnline>::into_erased(self).transition()()
+        self.transition_erased::<Online, _>()()
     }
 
     #[must_use]
@@ -120,7 +117,7 @@ impl Connection {
     where
         S: SMut,
     {
-        <_ as InOnline>::into_erased(self).transition()()
+        self.transition_erased::<Online, _>()()
     }
 
     #[must_use]

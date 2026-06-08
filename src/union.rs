@@ -19,6 +19,18 @@ impl<Marker> !StateUnionConcreteState for StateUnionState<Marker> {}
 #[doc(hidden)]
 pub trait StateUnionMember<State> {}
 
+/// Converts a concrete or already-erased member state into a union state.
+#[doc(hidden)]
+pub trait StateUnionErased<Marker>: StateTrait {
+    fn into_union_erased<Storage, T>(
+        state: State<Storage, T, Self>,
+    ) -> State<Storage, T, StateUnionState<Marker>>
+    where
+        Self: Sized,
+        Storage: StateStorage,
+        T: StateMachineImpl;
+}
+
 /// Runtime membership check for shared erased-state borrows.
 #[doc(hidden)]
 pub trait StateUnionRuntime {

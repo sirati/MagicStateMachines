@@ -31,14 +31,15 @@ pub use contract::{Initial, StateMachineImpl, Transition};
 pub use decomposed::{DecomposedData, DecomposedState, RecomposeError};
 pub use policy::{StateClone, StateCopy};
 pub use shared::{
-    ArcState, MutexState, MutexStorage, RcState, RefCellState, RefCellStorage, SharedBorrowState,
-    SharedState, SharedStateError, SharedStorage, SharedValue, StateMut, StateMutTransitionCall,
-    StateMutView, StateRef, StorageStateMut, transition_mut,
+    MutexStorage, RefCellStorage, RwLockStorage, SArc, SArcMutex, SArcRwLock, SMutView, SMutex,
+    SRc, SRcRefCell, SRefCell, SRwLock, SharedBorrowState, SharedState, SharedStateError,
+    SharedStorage, SharedValue, StateMut, StateMutTransitionCall, StateRef, StorageStateMut,
+    transition_mut,
 };
 pub use state::{
-    EffectTransitionCall, SMove, SMut, SOwned, SRef, SResult, State, StateOwned, StateOwnedBox,
-    StateOwnedPin, StateOwnedPinBox, StateStorage, StateStorageNew, StateTransitionCall,
-    StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
+    EffectTransitionCall, SBox, SMove, SMut, SOwned, SPin, SPinBox, SRef, SResult, State,
+    StateOwned, StateStorage, StateStorageNew, StateTransitionCall, StorageStateOwned,
+    StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
     StorageStateOwnedUniqueRc, TransitionCall, TransitionCallsite, TransitionEffect,
     TransitionEffectSelector, complete_transition_after_effect, transition, transition_callsite,
     transition_state, transition_state_with_effect,
@@ -50,7 +51,7 @@ pub use tracing::TraceEntry;
 pub use union::StateUnionConcreteState;
 #[doc(hidden)]
 pub use union::{
-    StateUnionMember, StateUnionRuntime, StateUnionState, StateUnionTransition,
+    StateUnionErased, StateUnionMember, StateUnionRuntime, StateUnionState, StateUnionTransition,
     StateUnionTransitionEffect, StateUnionTransitionEffectApply, StateUnionVariant,
 };
 

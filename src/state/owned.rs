@@ -43,9 +43,7 @@ pub struct StateOwned<T, S> {
     pub(crate) trace: Vec<crate::TraceEntry>,
 }
 
-pub type StateOwnedBox<T, S> = StateOwned<Box<T>, S>;
-pub type StateOwnedPin<T, S> = StateOwned<Pin<T>, S>;
-pub type StateOwnedPinBox<T, S> = StateOwned<Pin<Box<T>>, S>;
+pub type SPin<T, S> = StateOwned<Pin<T>, S>;
 
 /// A one-shot callable that completes a state transition.
 pub struct TransitionCall<T, From, To> {

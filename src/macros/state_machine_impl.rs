@@ -88,6 +88,72 @@ macro_rules! StateMachineImpl {
                 $crate::transition_state_with_effect(self, __StateMachineTransitionToken(()))
             }
         }
+
+        #[allow(dead_code)]
+        trait __GenericStateUnionTransitionExt<Storage, From>
+        where
+            Storage: $crate::StateStorage,
+        {
+            #[must_use]
+            #[track_caller]
+            fn transition_erased<Marker, To>(
+                self,
+            ) -> $crate::EffectTransitionCall<
+                Storage,
+                $implementation,
+                $crate::StateUnionState<Marker>,
+                To,
+                <$implementation as $crate::TransitionEffectSelector<
+                    $crate::StateUnionState<Marker>,
+                    To,
+                >>::Effect,
+            >
+            where
+                From: $crate::StateUnionErased<Marker>,
+                $crate::StateUnionState<Marker>: $crate::StateTrait,
+                To: $crate::StateTrait,
+                $standin: $crate::Transition<$crate::StateUnionState<Marker>, To>,
+                $implementation:
+                    $crate::TransitionEffectSelector<$crate::StateUnionState<Marker>, To>;
+        }
+
+        impl<Storage, From> __GenericStateUnionTransitionExt<Storage, From>
+            for $crate::State<Storage, $implementation, From>
+        where
+            Storage: $crate::StateStorage,
+            Storage::Machine<$implementation>: $crate::StateMachineImpl<
+                    Standin = $standin,
+                    Impl = $implementation,
+                    TransitionToken = __StateMachineTransitionToken,
+                >,
+        {
+            #[track_caller]
+            fn transition_erased<Marker, To>(
+                self,
+            ) -> $crate::EffectTransitionCall<
+                Storage,
+                $implementation,
+                $crate::StateUnionState<Marker>,
+                To,
+                <$implementation as $crate::TransitionEffectSelector<
+                    $crate::StateUnionState<Marker>,
+                    To,
+                >>::Effect,
+            >
+            where
+                From: $crate::StateUnionErased<Marker>,
+                $crate::StateUnionState<Marker>: $crate::StateTrait,
+                To: $crate::StateTrait,
+                $standin: $crate::Transition<$crate::StateUnionState<Marker>, To>,
+                $implementation:
+                    $crate::TransitionEffectSelector<$crate::StateUnionState<Marker>, To>,
+            {
+                $crate::transition_state_with_effect(
+                    <From as $crate::StateUnionErased<Marker>>::into_union_erased(self),
+                    __StateMachineTransitionToken(()),
+                )
+            }
+        }
     };
     ($implementation:ty : $standin:ty $(,)?) => {
         #[doc(hidden)]
@@ -298,6 +364,7 @@ macro_rules! __StateMachineImpl {
                 $args $body
             );
         )*
+
     };
     (
         @effect_impl $implementation:ty; $standin:ty; $from:ident $effect_from:ident => $to:ident

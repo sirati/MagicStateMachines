@@ -19,6 +19,11 @@ macro_rules! __StateUnion {
             impl [<__state_union_seal_ $first_super:snake>]::Sealed
                 for $crate::StateUnionState<$marker>
             {}
+            impl $crate::StateUnionErased<$first_super>
+                for $crate::StateUnionState<$marker>
+            {
+                $crate::__StateUnion!(@erased_variant_impl $first_super);
+            }
             impl [<In $first_super>]
                 for $crate::StateUnionState<$marker>
             {
@@ -31,6 +36,11 @@ macro_rules! __StateUnion {
                 impl [<__state_union_seal_ $supertrait:snake>]::Sealed
                     for $crate::StateUnionState<$marker>
                 {}
+                impl $crate::StateUnionErased<$supertrait>
+                    for $crate::StateUnionState<$marker>
+                {
+                    $crate::__StateUnion!(@erased_variant_impl $supertrait);
+                }
                 impl [<In $supertrait>]
                     for $crate::StateUnionState<$marker>
                 {
@@ -45,6 +55,7 @@ macro_rules! __StateUnion {
             pub trait [<In $marker>]:
                 $crate::StateTrait
                 + [<__state_union_seal_ $marker:snake>]::Sealed
+                + $crate::StateUnionErased<$marker>
                 + [<In $first_super>]
                 $(+ [<In $supertrait>])*
             {
@@ -54,11 +65,19 @@ macro_rules! __StateUnion {
             impl [<__state_union_seal_ $marker:snake>]::Sealed
                 for $crate::StateUnionState<$marker>
             {}
+            impl $crate::StateUnionErased<$marker>
+                for $crate::StateUnionState<$marker>
+            {
+                $crate::__StateUnion!(@erased_identity_impl $marker);
+            }
             impl [<In $marker>] for $crate::StateUnionState<$marker> {
                 $crate::__StateUnion!(@into_erased_identity_impl $marker);
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed for $first {}
+            impl $crate::StateUnionErased<$marker> for $first {
+                $crate::__StateUnion!(@erased_variant_impl $marker);
+            }
             impl [<In $marker>] for $first {
                 $crate::__StateUnion!(@into_erased_variant_impl $marker);
             }
@@ -68,6 +87,9 @@ macro_rules! __StateUnion {
 
             $(
                 impl [<__state_union_seal_ $marker:snake>]::Sealed for $state {}
+                impl $crate::StateUnionErased<$marker> for $state {
+                    $crate::__StateUnion!(@erased_variant_impl $marker);
+                }
                 impl [<In $marker>] for $state {
                     $crate::__StateUnion!(@into_erased_variant_impl $marker);
                 }
@@ -134,7 +156,9 @@ macro_rules! __StateUnion {
 
             #[allow(dead_code)]
             pub trait [<In $marker>]:
-                $crate::StateTrait + [<__state_union_seal_ $marker:snake>]::Sealed
+                $crate::StateTrait
+                + [<__state_union_seal_ $marker:snake>]::Sealed
+                + $crate::StateUnionErased<$marker>
             {
                 $crate::__StateUnion!(@into_erased_method $marker);
             }
@@ -142,11 +166,19 @@ macro_rules! __StateUnion {
             impl [<__state_union_seal_ $marker:snake>]::Sealed
                 for $crate::StateUnionState<$marker>
             {}
+            impl $crate::StateUnionErased<$marker>
+                for $crate::StateUnionState<$marker>
+            {
+                $crate::__StateUnion!(@erased_identity_impl $marker);
+            }
             impl [<In $marker>] for $crate::StateUnionState<$marker> {
                 $crate::__StateUnion!(@into_erased_identity_impl $marker);
             }
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed for $first {}
+            impl $crate::StateUnionErased<$marker> for $first {
+                $crate::__StateUnion!(@erased_variant_impl $marker);
+            }
             impl [<In $marker>] for $first {
                 $crate::__StateUnion!(@into_erased_variant_impl $marker);
             }
@@ -156,6 +188,9 @@ macro_rules! __StateUnion {
 
             $(
                 impl [<__state_union_seal_ $marker:snake>]::Sealed for $state {}
+                impl $crate::StateUnionErased<$marker> for $state {
+                    $crate::__StateUnion!(@erased_variant_impl $marker);
+                }
                 impl [<In $marker>] for $state {
                     $crate::__StateUnion!(@into_erased_variant_impl $marker);
                 }
@@ -262,6 +297,30 @@ macro_rules! __StateUnion {
             Self: Sized,
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl;
+    };
+    (@erased_identity_impl $marker:ident) => {
+        fn into_union_erased<Storage, T>(
+            state: $crate::State<Storage, T, Self>,
+        ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
+        where
+            Self: Sized,
+            Storage: $crate::StateStorage,
+            T: $crate::StateMachineImpl,
+        {
+            state
+        }
+    };
+    (@erased_variant_impl $marker:ident) => {
+        fn into_union_erased<Storage, T>(
+            state: $crate::State<Storage, T, Self>,
+        ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
+        where
+            Self: Sized,
+            Storage: $crate::StateStorage,
+            T: $crate::StateMachineImpl,
+        {
+            $crate::StateUnionVariant::<Storage, T, Self, $marker>::new(state).into_erased()
+        }
     };
     (@into_erased_identity_impl $marker:ident) => {
         fn into_erased<Storage, T>(

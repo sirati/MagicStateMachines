@@ -16,16 +16,14 @@ mod tests {
 
     #[test]
     fn online_enum_calls_online_restricted_endpoint() {
-        let online = Connection::disconnected("localhost:8080")
-            .connect()
-            .as_online_enum();
+        let online = Connection::new("localhost:8080").connect().as_online_enum();
 
         assert_eq!(online.endpoint(), "localhost:8080");
     }
 
     #[test]
     fn anonymous_online_state_converts_through_union_trait() {
-        let online = Connection::disconnected("localhost:8081")
+        let online = Connection::new("localhost:8081")
             .connect()
             .authenticate("alice")
             .as_online_enum();
@@ -35,7 +33,7 @@ mod tests {
 
     #[test]
     fn anonymous_online_state_disconnects_through_erased_transition() {
-        let disconnected = Connection::disconnected("localhost:8082")
+        let disconnected = Connection::new("localhost:8082")
             .connect()
             .authenticate("alice")
             .disconnect();

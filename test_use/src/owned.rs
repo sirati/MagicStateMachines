@@ -1,9 +1,9 @@
 use crate::connection::Connection;
-use statemachines::{State, StorageStateOwnedBox};
-use test_def::{OnlineEnum, states::Disconnected};
+use statemachines::SBox;
+use test_def::OnlineEnum;
 
 pub(crate) fn run() {
-    let connection = Connection::disconnected("localhost:8080");
+    let connection = Connection::new("localhost:8080");
     let connection = match connection.try_connect(true) {
         Ok(connection) => connection,
         Err(_) => return,
@@ -31,12 +31,11 @@ pub(crate) fn run() {
 
     let _connection = connection.disconnect();
 
-    let online = Connection::disconnected("localhost:8081")
+    let online = Connection::new("localhost:8081")
         .connect()
         .authenticate_if(None);
     let _disconnected = online.into_erased().disconnect_online();
 
-    let boxed: State<StorageStateOwnedBox, Connection, Disconnected> =
-        State::new(Connection::new("localhost:9090"));
+    let boxed: SBox<_, _> = SBox::new(Connection::new("localhost:9090"));
     let _boxed = boxed.connect();
 }

@@ -2,7 +2,7 @@ use crate::state_trait::ErasedState;
 use core::fmt;
 use core::ops::{Deref, DerefMut};
 use std::cell::{Ref, RefCell, RefMut};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// The state marker and runtime data held by a shared-storage backend.
 ///
@@ -108,5 +108,31 @@ impl SharedStorage for MutexStorage {
 
     fn write<T>(storage: &Self::Storage<T>) -> Result<Self::WriteGuard<'_, T>, SharedStateError> {
         storage.lock().map_err(|_| SharedStateError::Poisoned)
+    }
+}
+
+pub struct RwLockStorage;
+
+impl SharedStorage for RwLockStorage {
+    type Storage<T> = RwLock<SharedValue<T>>;
+    type ReadGuard<'a, T>
+        = RwLockReadGuard<'a, SharedValue<T>>
+    where
+        T: 'a;
+    type WriteGuard<'a, T>
+        = RwLockWriteGuard<'a, SharedValue<T>>
+    where
+        T: 'a;
+
+    fn new<T>(value: SharedValue<T>) -> Self::Storage<T> {
+        RwLock::new(value)
+    }
+
+    fn read<T>(storage: &Self::Storage<T>) -> Result<Self::ReadGuard<'_, T>, SharedStateError> {
+        storage.read().map_err(|_| SharedStateError::Poisoned)
+    }
+
+    fn write<T>(storage: &Self::Storage<T>) -> Result<Self::WriteGuard<'_, T>, SharedStateError> {
+        storage.write().map_err(|_| SharedStateError::Poisoned)
     }
 }

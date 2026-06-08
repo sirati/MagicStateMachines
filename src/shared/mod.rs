@@ -1,7 +1,7 @@
 mod guard;
 mod storage;
 
-use crate::{Initial, State, StateMachineImpl, state_trait};
+use crate::{Initial, SOwned, State, StateMachineImpl, state_trait};
 use core::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -9,7 +9,9 @@ use std::sync::Arc;
 pub use guard::{
     SharedBorrowState, StateMut, StateMutTransitionCall, StateRef, StorageStateMut, transition_mut,
 };
-pub use storage::{MutexStorage, RefCellStorage, SharedStateError, SharedStorage, SharedValue};
+pub use storage::{
+    MutexStorage, RefCellStorage, RwLockStorage, SharedStateError, SharedStorage, SharedValue,
+};
 
 /// Shared state using an explicit, replaceable storage backend.
 pub struct SharedState<P, S, T>
@@ -53,6 +55,21 @@ where
         }
     }
 
+    #[must_use]
+    pub fn from_state<StateMarker>(state: State<SOwned, T, StateMarker>) -> Self
+    where
+        StateMarker: crate::StateTrait,
+    {
+        Self {
+            storage: P::from(Backend::new(SharedValue {
+                state: state_trait::erased_state::<StateMarker>(),
+                value: state.inner.value,
+            })),
+            backend: PhantomData,
+            value: PhantomData,
+        }
+    }
+
     pub fn borrow<State>(
         &self,
     ) -> Result<StateRef<Backend::ReadGuard<'_, T>, T, State>, SharedStateError>
@@ -64,7 +81,7 @@ where
 
     pub fn borrow_mut<StateMarker>(
         &self,
-    ) -> Result<StateMutView<'_, Backend, T, StateMarker>, SharedStateError>
+    ) -> Result<SMutView<'_, Backend, T, StateMarker>, SharedStateError>
     where
         StateMarker: SharedBorrowState,
     {
@@ -72,8 +89,12 @@ where
     }
 }
 
-pub type RcState<S, T> = SharedState<Rc<<S as SharedStorage>::Storage<T>>, S, T>;
-pub type ArcState<S, T> = SharedState<Arc<<S as SharedStorage>::Storage<T>>, S, T>;
-pub type RefCellState<T> = RcState<RefCellStorage, T>;
-pub type MutexState<T> = ArcState<MutexStorage, T>;
-pub type StateMutView<'a, Backend, T, S> = State<StorageStateMut<'a, Backend>, T, S>;
+pub type SRc<Storage, T> = SharedState<Rc<<Storage as SharedStorage>::Storage<T>>, Storage, T>;
+pub type SArc<Storage, T> = SharedState<Arc<<Storage as SharedStorage>::Storage<T>>, Storage, T>;
+pub type SRcRefCell<T> = SRc<RefCellStorage, T>;
+pub type SArcMutex<T> = SArc<MutexStorage, T>;
+pub type SArcRwLock<T> = SArc<RwLockStorage, T>;
+pub type SRefCell<'a> = StorageStateMut<'a, RefCellStorage>;
+pub type SMutex<'a> = StorageStateMut<'a, MutexStorage>;
+pub type SRwLock<'a> = StorageStateMut<'a, RwLockStorage>;
+pub type SMutView<'a, Backend, T, S> = State<StorageStateMut<'a, Backend>, T, S>;
