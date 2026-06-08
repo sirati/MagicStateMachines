@@ -22,12 +22,18 @@ macro_rules! __StateUnion {
             impl $crate::StateUnionErased<$first_super>
                 for $crate::StateUnionState<$marker>
             {
-                $crate::__StateUnion!(@erased_variant_impl $first_super);
+                $crate::__StateUnion!(
+                    @erased_union_variant_impl $marker => $first_super:
+                    $first $(| $state)*
+                );
             }
             impl [<In $first_super>]
                 for $crate::StateUnionState<$marker>
             {
-                $crate::__StateUnion!(@into_erased_variant_impl $first_super);
+                $crate::__StateUnion!(
+                    @into_erased_union_variant_impl $marker => $first_super:
+                    $first $(| $state)*
+                );
             }
             impl $crate::StateUnionMember<
                 $crate::StateUnionState<$marker>
@@ -39,12 +45,12 @@ macro_rules! __StateUnion {
                 impl $crate::StateUnionErased<$supertrait>
                     for $crate::StateUnionState<$marker>
                 {
-                    $crate::__StateUnion!(@erased_variant_impl $supertrait);
+                    $crate::__StateUnion!(@erased_identity_impl $supertrait);
                 }
                 impl [<In $supertrait>]
                     for $crate::StateUnionState<$marker>
                 {
-                    $crate::__StateUnion!(@into_erased_variant_impl $supertrait);
+                    $crate::__StateUnion!(@into_erased_identity_impl $supertrait);
                 }
                 impl $crate::StateUnionMember<
                     $crate::StateUnionState<$marker>
@@ -76,10 +82,10 @@ macro_rules! __StateUnion {
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed for $first {}
             impl $crate::StateUnionErased<$marker> for $first {
-                $crate::__StateUnion!(@erased_variant_impl $marker);
+                $crate::__StateUnion!(@erased_variant_impl $marker $first);
             }
             impl [<In $marker>] for $first {
-                $crate::__StateUnion!(@into_erased_variant_impl $marker);
+                $crate::__StateUnion!(@into_erased_variant_impl $marker $first);
             }
             impl $crate::StateUnionMember<$first>
                 for $marker
@@ -88,10 +94,10 @@ macro_rules! __StateUnion {
             $(
                 impl [<__state_union_seal_ $marker:snake>]::Sealed for $state {}
                 impl $crate::StateUnionErased<$marker> for $state {
-                    $crate::__StateUnion!(@erased_variant_impl $marker);
+                    $crate::__StateUnion!(@erased_variant_impl $marker $state);
                 }
                 impl [<In $marker>] for $state {
-                    $crate::__StateUnion!(@into_erased_variant_impl $marker);
+                    $crate::__StateUnion!(@into_erased_variant_impl $marker $state);
                 }
                 impl $crate::StateUnionMember<$state>
                     for $marker
@@ -177,10 +183,10 @@ macro_rules! __StateUnion {
 
             impl [<__state_union_seal_ $marker:snake>]::Sealed for $first {}
             impl $crate::StateUnionErased<$marker> for $first {
-                $crate::__StateUnion!(@erased_variant_impl $marker);
+                $crate::__StateUnion!(@erased_variant_impl $marker $first);
             }
             impl [<In $marker>] for $first {
-                $crate::__StateUnion!(@into_erased_variant_impl $marker);
+                $crate::__StateUnion!(@into_erased_variant_impl $marker $first);
             }
             impl $crate::StateUnionMember<$first>
                 for $marker
@@ -189,10 +195,10 @@ macro_rules! __StateUnion {
             $(
                 impl [<__state_union_seal_ $marker:snake>]::Sealed for $state {}
                 impl $crate::StateUnionErased<$marker> for $state {
-                    $crate::__StateUnion!(@erased_variant_impl $marker);
+                    $crate::__StateUnion!(@erased_variant_impl $marker $state);
                 }
                 impl [<In $marker>] for $state {
-                    $crate::__StateUnion!(@into_erased_variant_impl $marker);
+                    $crate::__StateUnion!(@into_erased_variant_impl $marker $state);
                 }
                 impl $crate::StateUnionMember<$state>
                     for $marker
@@ -292,7 +298,7 @@ macro_rules! __StateUnion {
         #[must_use]
         fn into_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
-        ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
+        ) -> $crate::DiscriminatedState<Storage, T, $marker>
         where
             Self: Sized,
             Storage: $crate::StateStorage,
@@ -301,49 +307,156 @@ macro_rules! __StateUnion {
     (@erased_identity_impl $marker:ident) => {
         fn into_union_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
-        ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
+        ) -> $crate::DiscriminatedState<Storage, T, $marker>
         where
             Self: Sized,
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
+            $marker: $crate::StateUnionDiscriminant,
         {
-            state
+            $crate::__private::paste! {
+                let discriminator =
+                    $crate::state_union_discriminator::<
+                        Storage,
+                        T,
+                        Self,
+                        [<$marker Discriminator>],
+                    >(&state)
+                    .expect("state union discriminator is unavailable");
+                $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(
+                    state,
+                    discriminator,
+                )
+            }
         }
     };
-    (@erased_variant_impl $marker:ident) => {
+    (@erased_variant_impl $marker:ident $variant:ident) => {
         fn into_union_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
-        ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
+        ) -> $crate::DiscriminatedState<Storage, T, $marker>
         where
             Self: Sized,
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
+            $marker: $crate::StateUnionDiscriminant,
         {
-            $crate::StateUnionVariant::<Storage, T, Self, $marker>::new(state).into_erased()
+            $crate::__private::paste! {
+                $crate::discriminate_state::<Storage, T, Self, $marker>(
+                    state,
+                    [<$marker Discriminator>]::$variant,
+                )
+            }
+        }
+    };
+    (
+        @erased_union_variant_impl $source:ident => $target:ident:
+        $first:ident $(| $state:ident)*
+    ) => {
+        fn into_union_erased<Storage, T>(
+            state: $crate::State<Storage, T, Self>,
+        ) -> $crate::DiscriminatedState<Storage, T, $target>
+        where
+            Self: Sized,
+            Storage: $crate::StateStorage,
+            T: $crate::StateMachineImpl,
+            $target: $crate::StateUnionDiscriminant,
+        {
+            $crate::__private::paste! {
+                let discriminator =
+                    $crate::state_union_discriminator::<
+                        Storage,
+                        T,
+                        Self,
+                        [<$source Discriminator>],
+                    >(&state)
+                    .expect("state union discriminator is unavailable");
+                let discriminator = match discriminator {
+                    [<$source Discriminator>]::$first => [<$target Discriminator>]::$first,
+                    $(
+                        [<$source Discriminator>]::$state => [<$target Discriminator>]::$state,
+                    )*
+                };
+                $crate::rediscriminate_union_state::<Storage, T, $source, $target>(
+                    state,
+                    discriminator,
+                )
+            }
         }
     };
     (@into_erased_identity_impl $marker:ident) => {
         fn into_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
-        ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
+        ) -> $crate::DiscriminatedState<Storage, T, $marker>
         where
             Self: Sized,
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            state
+            $crate::__private::paste! {
+                let discriminator =
+                    $crate::state_union_discriminator::<
+                        Storage,
+                        T,
+                        Self,
+                        [<$marker Discriminator>],
+                    >(&state)
+                    .expect("state union discriminator is unavailable");
+                $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(
+                    state,
+                    discriminator,
+                )
+            }
         }
     };
-    (@into_erased_variant_impl $marker:ident) => {
+    (@into_erased_variant_impl $marker:ident $variant:ident) => {
         fn into_erased<Storage, T>(
             state: $crate::State<Storage, T, Self>,
-        ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>>
+        ) -> $crate::DiscriminatedState<Storage, T, $marker>
         where
             Self: Sized,
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            $crate::StateUnionVariant::<Storage, T, Self, $marker>::new(state).into_erased()
+            $crate::__private::paste! {
+                $crate::discriminate_state::<Storage, T, Self, $marker>(
+                    state,
+                    [<$marker Discriminator>]::$variant,
+                )
+            }
+        }
+    };
+    (
+        @into_erased_union_variant_impl $source:ident => $target:ident:
+        $first:ident $(| $state:ident)*
+    ) => {
+        fn into_erased<Storage, T>(
+            state: $crate::State<Storage, T, Self>,
+        ) -> $crate::DiscriminatedState<Storage, T, $target>
+        where
+            Self: Sized,
+            Storage: $crate::StateStorage,
+            T: $crate::StateMachineImpl,
+        {
+            $crate::__private::paste! {
+                let discriminator =
+                    $crate::state_union_discriminator::<
+                        Storage,
+                        T,
+                        Self,
+                        [<$source Discriminator>],
+                    >(&state)
+                    .expect("state union discriminator is unavailable");
+                let discriminator = match discriminator {
+                    [<$source Discriminator>]::$first => [<$target Discriminator>]::$first,
+                    $(
+                        [<$source Discriminator>]::$state => [<$target Discriminator>]::$state,
+                    )*
+                };
+                $crate::rediscriminate_union_state::<Storage, T, $source, $target>(
+                    state,
+                    discriminator,
+                )
+            }
         }
     };
     (

@@ -61,7 +61,7 @@ pub(crate) fn run() {
     let online = block_on(async { authenticated.logout().await.authenticate_if(None).await });
     println!("{} is asynchronously online", online.endpoint());
 
-    let disconnected = block_on(online.into_erased().disconnect());
+    let disconnected = block_on(online.disconnect());
     println!(
         "{} is asynchronously disconnected",
         disconnected.raw_endpoint()
@@ -72,7 +72,7 @@ pub(crate) fn run() {
         let c = c.connect();
         let c = c.await;
         let c = c.as_online_enum();
-        //c.as_online_enum()
+        let c = c.as_online_enum();
         c
     });
     // use test_def::OnlineEnum::*;
@@ -117,8 +117,10 @@ impl ConnectionAsync {
         S: SMut,
     {
         match user {
-            Some(user) => self.authenticate(user).await.into(),
-            None => self.into(),
+            Some(user) => {
+                <Authenticated as OnlineIntoEnum>::into_enum(self.authenticate(user).await)
+            }
+            None => <Connected as OnlineIntoEnum>::into_enum(self),
         }
     }
 

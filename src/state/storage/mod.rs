@@ -1,6 +1,9 @@
 mod owned;
 
-use crate::{Initial, StateMachineImpl, Transition};
+use crate::{
+    DiscriminatedState, Initial, SDiscriminated, StateMachineImpl, StateUnionDiscriminant,
+    StateUnionState, Transition, undiscriminate_state,
+};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "tracing")]
@@ -83,18 +86,17 @@ pub trait StateStorage: Sized {
         T: StateMachineImpl,
         From: crate::StateTrait,
         To: crate::StateTrait;
-}
 
-pub(crate) fn retag_state<Storage, T, From, To>(
-    state: State<Storage, T, From>,
-) -> State<Storage, T, To>
-where
-    Storage: StateStorage,
-    T: StateMachineImpl,
-{
-    State {
-        inner: Storage::retag(state.inner),
-        marker: PhantomData,
+    #[doc(hidden)]
+    fn union_discriminator<T, State, Discriminator>(
+        inner: &Self::Inner<T, State>,
+    ) -> Option<Discriminator>
+    where
+        T: StateMachineImpl,
+        Discriminator: Copy + 'static,
+    {
+        let _ = inner;
+        None
     }
 }
 
@@ -179,6 +181,19 @@ where
     marker: PhantomData<fn() -> (To, Effect)>,
 }
 
+/// A callable erased-union transition that returns to the original storage after transition.
+#[doc(hidden)]
+pub struct ErasedEffectTransitionCall<Storage, T, Marker, To, Effect>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    Marker: StateUnionDiscriminant,
+{
+    state: DiscriminatedState<Storage, T, Marker>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> (To, Effect)>,
+}
+
 #[cfg(feature = "tracing")]
 pub type TransitionCallsite = &'static Location<'static>;
 
@@ -240,6 +255,35 @@ where
     }
 }
 
+impl<Storage, T, Marker, To, Args, Effect> FnOnce<Args>
+    for ErasedEffectTransitionCall<Storage, T, Marker, To, Effect>
+where
+    T: StateMachineImpl,
+    Storage: SMut,
+    Marker: StateUnionDiscriminant,
+    T::Standin: Transition<StateUnionState<Marker>, To>,
+    <T::Standin as Transition<StateUnionState<Marker>, To>>::F: FnOnce<Args, Output = ()>,
+    Args: core::marker::Tuple,
+    StateUnionState<Marker>: crate::StateTrait,
+    To: crate::StateTrait,
+    Effect: TransitionEffect<T, StateUnionState<Marker>, To, Args>,
+{
+    type Output = State<Storage, T, To>;
+
+    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+        Effect::apply(
+            <SDiscriminated<Storage, Marker::Discriminator> as SMut>::s_mut(&mut self.state.inner),
+            args,
+        );
+        let transitioned =
+            SDiscriminated::<Storage, Marker::Discriminator>::complete_transition_after_effect(
+                self.state,
+                self.callsite,
+            );
+        undiscriminate_state(transitioned)
+    }
+}
+
 /// Creates a callable transition for generic state storage.
 #[must_use]
 #[track_caller]
@@ -278,6 +322,29 @@ where
     Next: crate::StateTrait,
 {
     EffectTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable erased-union transition that runs implementation-side effects first.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_erased_state_with_effect<Storage, T, Marker, Next, Effect>(
+    state: DiscriminatedState<Storage, T, Marker>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> ErasedEffectTransitionCall<Storage, T, Marker, Next, Effect>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    Marker: StateUnionDiscriminant,
+    T::Standin: Transition<StateUnionState<Marker>, Next>,
+    StateUnionState<Marker>: crate::StateTrait,
+    Next: crate::StateTrait,
+{
+    ErasedEffectTransitionCall {
         state,
         callsite: transition_callsite(),
         marker: PhantomData,

@@ -65,7 +65,12 @@ macro_rules! __StateUnionEnum {
                     Storage: $crate::StateStorage,
                     T: $crate::StateMachineImpl,
                 {
-                    $enum_name::$first($crate::StateUnionVariant::new(state))
+                    $crate::__private::paste! {
+                        $crate::discriminate_state::<Storage, T, Self, $marker>(
+                            state,
+                            [<$marker Discriminator>]::$first,
+                        )
+                    }
                 }
             }
 
@@ -78,10 +83,53 @@ macro_rules! __StateUnionEnum {
                         Storage: $crate::StateStorage,
                         T: $crate::StateMachineImpl,
                     {
-                        $enum_name::$state($crate::StateUnionVariant::new(state))
+                        $crate::__private::paste! {
+                            $crate::discriminate_state::<Storage, T, Self, $marker>(
+                                state,
+                                [<$marker Discriminator>]::$state,
+                            )
+                        }
                     }
                 }
             )*
+
+            impl [<$marker IntoEnum>] for $crate::StateUnionState<$marker> {
+                fn into_enum<Storage, T>(
+                    state: $crate::State<Storage, T, Self>,
+                ) -> $crate::DiscriminatedState<Storage, T, $marker>
+                where
+                    Storage: $crate::StateStorage,
+                    T: $crate::StateMachineImpl,
+                {
+                    $crate::__private::paste! {
+                        let discriminator =
+                            $crate::state_union_discriminator::<
+                                Storage,
+                                T,
+                                Self,
+                                [<$marker Discriminator>],
+                            >(&state)
+                            .expect("state union discriminator is unavailable");
+
+                        match discriminator {
+                            [<$marker Discriminator>]::$first => {
+                                $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(
+                                    state,
+                                    discriminator,
+                                )
+                            }
+                            $(
+                                [<$marker Discriminator>]::$state => {
+                                    $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(
+                                        state,
+                                        discriminator,
+                                    )
+                                }
+                            )*
+                        }
+                    }
+                }
+            }
 
             impl<Storage, T> [<$marker IntoEnum>] for $enum_name<Storage, T>
             where
@@ -104,24 +152,84 @@ macro_rules! __StateUnionEnum {
         @enum $enum_name:ident $marker:ident:
         $first:ident $(| $state:ident)*
     ) => {
+        $crate::__private::paste! {
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            #[allow(dead_code)]
+            #[allow(non_camel_case_types)]
+            pub enum [<$marker Discriminator>] {
+                $first,
+                $(
+                    $state,
+                )*
+            }
+        }
+
         #[allow(dead_code)]
         pub enum $enum_name<Storage, T>
         where
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            $first($crate::StateUnionVariant<Storage, T, $first, $marker>),
+            $first(
+                $crate::__private::paste! {
+                    $crate::StateUnionVariant<
+                        Storage,
+                        T,
+                        $first,
+                        $marker,
+                        [<$marker Discriminator>],
+                    >
+                }
+            ),
             $(
-                $state($crate::StateUnionVariant<Storage, T, $state, $marker>),
+                $state(
+                    $crate::__private::paste! {
+                        $crate::StateUnionVariant<
+                            Storage,
+                            T,
+                            $state,
+                            $marker,
+                            [<$marker Discriminator>],
+                        >
+                    }
+                ),
             )*
         }
 
         impl $crate::StateUnionDiscriminant for $marker {
-            type Discriminated<Storage, T>
+            type Discriminator = $crate::__private::paste! { [<$marker Discriminator>] };
+
+            type Enum<Storage, T>
                 = $enum_name<Storage, T>
             where
                 Storage: $crate::StateStorage,
                 T: $crate::StateMachineImpl;
+
+            fn discriminate<Storage, T>(
+                state: $crate::__private::paste! {
+                    $crate::State<
+                        $crate::SDiscriminated<Storage, [<$marker Discriminator>]>,
+                        T,
+                        $crate::StateUnionState<$marker>,
+                    >
+                },
+            ) -> Self::Enum<Storage, T>
+            where
+                Storage: $crate::StateStorage,
+                T: $crate::StateMachineImpl,
+            {
+                let discriminator = $crate::discriminated_state_discriminator(&state);
+                match discriminator {
+                    $crate::__private::paste! { [<$marker Discriminator>]::$first } => {
+                        $enum_name::$first($crate::StateUnionVariant::from_erased(state))
+                    }
+                    $(
+                        $crate::__private::paste! { [<$marker Discriminator>]::$state } => {
+                            $enum_name::$state($crate::StateUnionVariant::from_erased(state))
+                        }
+                    )*
+                }
+            }
         }
 
         impl<Storage, T> ::core::ops::Deref for $enum_name<Storage, T>
@@ -129,7 +237,13 @@ macro_rules! __StateUnionEnum {
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            type Target = $crate::State<Storage, T, $crate::StateUnionState<$marker>>;
+            type Target = $crate::__private::paste! {
+                $crate::State<
+                    $crate::SDiscriminated<Storage, [<$marker Discriminator>]>,
+                    T,
+                    $crate::StateUnionState<$marker>,
+                >
+            };
 
             fn deref(&self) -> &Self::Target {
                 match self {
@@ -150,7 +264,13 @@ macro_rules! __StateUnionEnum {
             #[must_use]
             pub fn into_erased(
                 self,
-            ) -> $crate::State<Storage, T, $crate::StateUnionState<$marker>> {
+            ) -> $crate::__private::paste! {
+                $crate::State<
+                    $crate::SDiscriminated<Storage, [<$marker Discriminator>]>,
+                    T,
+                    $crate::StateUnionState<$marker>,
+                >
+            } {
                 match self {
                     Self::$first(state) => state.into_erased(),
                     $(
@@ -160,28 +280,5 @@ macro_rules! __StateUnionEnum {
             }
         }
 
-        impl<Storage, T> ::core::convert::From<$crate::State<Storage, T, $first>>
-            for $crate::DiscriminatedState<Storage, T, $marker>
-        where
-            Storage: $crate::StateStorage,
-            T: $crate::StateMachineImpl,
-        {
-            fn from(state: $crate::State<Storage, T, $first>) -> Self {
-                $enum_name::$first($crate::StateUnionVariant::new(state))
-            }
-        }
-
-        $(
-            impl<Storage, T> ::core::convert::From<$crate::State<Storage, T, $state>>
-                for $crate::DiscriminatedState<Storage, T, $marker>
-            where
-                Storage: $crate::StateStorage,
-                T: $crate::StateMachineImpl,
-            {
-                fn from(state: $crate::State<Storage, T, $state>) -> Self {
-                    $enum_name::$state($crate::StateUnionVariant::new(state))
-                }
-            }
-        )*
     };
 }

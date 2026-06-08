@@ -85,8 +85,8 @@ impl Connection {
         S: SMut,
     {
         match user {
-            Some(user) => self.authenticate(user).into(),
-            None => self.into(),
+            Some(user) => <Authenticated as OnlineIntoEnum>::into_enum(self.authenticate(user)),
+            None => <Connected as OnlineIntoEnum>::into_enum(self),
         }
     }
 

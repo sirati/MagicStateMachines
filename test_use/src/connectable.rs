@@ -47,8 +47,8 @@ pub(crate) trait Connectable:
         S: SMut,
     {
         match user {
-            Some(user) => self.authenticate(user).into(),
-            None => self.into(),
+            Some(user) => <Authenticated as OnlineIntoEnum>::into_enum(self.authenticate(user)),
+            None => <Connected as OnlineIntoEnum>::into_enum(self),
         }
     }
 
@@ -158,7 +158,7 @@ pub(crate) fn run() {
     let online = authenticated.logout().as_online_enum();
     println!("{} is trait-online", online.endpoint());
 
-    let disconnected = online.into_erased().disconnect();
+    let disconnected = online.disconnect();
     println!("{} is trait-disconnected", disconnected.raw_endpoint());
 
     let online = ConnectionViaTrait::new("localhost:8088")

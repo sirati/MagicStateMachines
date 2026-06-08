@@ -8,14 +8,14 @@ pub(crate) fn run() {
         Ok(connection) => connection,
         Err(_) => return,
     };
-    let connection = match connection.as_online_enum() {
+    let connection = match connection.as_online_enum().discriminate() {
         OnlineEnum::Connected(connection) => connection.into_state(),
         OnlineEnum::Authenticated(_) => return,
     };
     let online = connection.authenticate_if(Some("alice".into()));
     println!("{} is online", online.endpoint());
 
-    let connection = match online {
+    let connection = match online.discriminate() {
         OnlineEnum::Authenticated(connection) => connection.into_state(),
         OnlineEnum::Connected(_) => return,
     };
@@ -34,7 +34,7 @@ pub(crate) fn run() {
     let online = Connection::new("localhost:8081")
         .connect()
         .authenticate_if(None);
-    let _disconnected = online.into_erased().disconnect_online();
+    let _disconnected = online.disconnect_online();
 
     let boxed: SBox<_, _> = SBox::new(Connection::new("localhost:9090"));
     let _boxed = boxed.connect();

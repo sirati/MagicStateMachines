@@ -25,7 +25,7 @@ mod tests {
     use super::connectable::{Connectable, ConnectionViaTrait};
     use super::connection::Connection;
     use super::connection_async::ConnectionAsync;
-    use test_def::{OnlineEnum, OnlineIntoEnum};
+    use test_def::{Online, OnlineDiscriminator, OnlineEnum, OnlineIntoEnum};
 
     fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
         let mut future = pin!(future);
@@ -123,5 +123,40 @@ mod tests {
         fn assert_online_into_enum<T: OnlineIntoEnum>() {}
 
         assert_online_into_enum::<OnlineEnum<statemachines::SOwned, Connection>>();
+    }
+
+    #[test]
+    fn online_enum_deref_carries_discriminator_in_storage() {
+        fn expect_discriminated_storage(
+            _state: &statemachines::State<
+                statemachines::SDiscriminated<statemachines::SOwned, OnlineDiscriminator>,
+                Connection,
+                statemachines::StateUnionState<Online>,
+            >,
+        ) {
+        }
+
+        let online = Connection::new("localhost:8092")
+            .connect()
+            .authenticate_if(None);
+
+        expect_discriminated_storage(&online);
+    }
+
+    #[test]
+    fn erased_online_state_recovers_discriminated_variant() {
+        let connected = Connection::new("localhost:8093")
+            .connect()
+            .authenticate_if(None)
+            .discriminate();
+
+        assert!(matches!(connected, OnlineEnum::Connected(_)));
+
+        let authenticated = Connection::new("localhost:8094")
+            .connect()
+            .authenticate_if(Some("alice".to_owned()))
+            .discriminate();
+
+        assert!(matches!(authenticated, OnlineEnum::Authenticated(_)));
     }
 }

@@ -43,31 +43,9 @@
 /// requires_disconnect::<StateUnionState<Online>>();
 /// ```
 ///
-/// A joint state cannot be converted back into a concrete enum variant:
-///
-/// ```compile_fail
-/// use statemachines::{State, StateMachineImpl, StateUnion, StateUnionState, StorageStateOwned};
-///
-/// struct Machine;
-/// struct Connected;
-/// struct Authenticated;
-/// struct Runtime;
-/// struct Token;
-///
-/// impl StateMachineImpl for Runtime {
-///     type Standin = Machine;
-///     type Impl = Self;
-///     type TransitionToken = Token;
-/// }
-///
-/// StateUnion!(Online, enum OnlineEnum: Connected | Authenticated);
-///
-/// type OnlineJoint = StateUnionState<Online>;
-///
-/// fn cannot_recover_variant(state: State<StorageStateOwned, Runtime, OnlineJoint>) {
-///     let _ = <OnlineJoint as OnlineIntoEnum>::into_enum(state);
-/// }
-/// ```
+/// `DiscriminatedState<Storage, T, Online>` carries the concrete variant in
+/// its storage. Calling `discriminate()` recovers the generated enum when
+/// runtime branching is needed.
 #[macro_export]
 macro_rules! StateUnion {
     (

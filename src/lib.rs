@@ -37,24 +37,27 @@ pub use shared::{
     WrongStateError, transition_mut,
 };
 pub use state::{
-    EffectTransitionCall, SBox, SMove, SMut, SOwned, SPin, SPinBox, SRef, SResult, State,
-    StateOwned, StateStorage, StateStorageNew, StateTransitionCall, StorageStateOwned,
-    StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
+    EffectTransitionCall, ErasedEffectTransitionCall, SBox, SMove, SMut, SOwned, SPin, SPinBox,
+    SRef, SResult, State, StateOwned, StateStorage, StateStorageNew, StateTransitionCall,
+    StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox, StorageStateOwnedUniqueArc,
     StorageStateOwnedUniqueRc, TransitionCall, TransitionCallsite, TransitionEffect,
     TransitionEffectSelector, complete_transition_after_effect, transition, transition_callsite,
-    transition_state, transition_state_with_effect,
+    transition_erased_state_with_effect, transition_state, transition_state_with_effect,
 };
 pub use state_trait::StateTrait;
 #[cfg(feature = "tracing")]
 pub use tracing::TraceEntry;
 #[doc(hidden)]
 pub use union::StateUnionConcreteState;
-pub use union::{DiscriminatedState, StateUnionDiscriminant};
 #[doc(hidden)]
 pub use union::{
-    StateUnionErased, StateUnionMember, StateUnionRuntime, StateUnionState, StateUnionTransition,
-    StateUnionTransitionEffect, StateUnionTransitionEffectApply, StateUnionVariant,
+    DiscriminatedInner, SDiscriminated, StateUnionErased, StateUnionMember, StateUnionRuntime,
+    StateUnionState, StateUnionTransition, StateUnionTransitionEffect,
+    StateUnionTransitionEffectApply, StateUnionVariant, discriminate_state,
+    discriminated_state_discriminator, rediscriminate_union_state, state_union_discriminator,
+    undiscriminate_state,
 };
+pub use union::{DiscriminatedState, StateUnionDiscriminant};
 
 #[doc(hidden)]
 pub mod __private {

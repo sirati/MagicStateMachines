@@ -98,10 +98,10 @@ macro_rules! StateMachineImpl {
             #[track_caller]
             fn transition_erased<Marker, To>(
                 self,
-            ) -> $crate::EffectTransitionCall<
+            ) -> $crate::ErasedEffectTransitionCall<
                 Storage,
                 $implementation,
-                $crate::StateUnionState<Marker>,
+                Marker,
                 To,
                 <$implementation as $crate::TransitionEffectSelector<
                     $crate::StateUnionState<Marker>,
@@ -110,6 +110,7 @@ macro_rules! StateMachineImpl {
             >
             where
                 From: $crate::StateUnionErased<Marker>,
+                Marker: $crate::StateUnionDiscriminant,
                 $crate::StateUnionState<Marker>: $crate::StateTrait,
                 To: $crate::StateTrait,
                 $standin: $crate::Transition<$crate::StateUnionState<Marker>, To>,
@@ -130,10 +131,10 @@ macro_rules! StateMachineImpl {
             #[track_caller]
             fn transition_erased<Marker, To>(
                 self,
-            ) -> $crate::EffectTransitionCall<
+            ) -> $crate::ErasedEffectTransitionCall<
                 Storage,
                 $implementation,
-                $crate::StateUnionState<Marker>,
+                Marker,
                 To,
                 <$implementation as $crate::TransitionEffectSelector<
                     $crate::StateUnionState<Marker>,
@@ -142,13 +143,14 @@ macro_rules! StateMachineImpl {
             >
             where
                 From: $crate::StateUnionErased<Marker>,
+                Marker: $crate::StateUnionDiscriminant,
                 $crate::StateUnionState<Marker>: $crate::StateTrait,
                 To: $crate::StateTrait,
                 $standin: $crate::Transition<$crate::StateUnionState<Marker>, To>,
                 $implementation:
                     $crate::TransitionEffectSelector<$crate::StateUnionState<Marker>, To>,
             {
-                $crate::transition_state_with_effect(
+                $crate::transition_erased_state_with_effect(
                     <From as $crate::StateUnionErased<Marker>>::into_union_erased(self),
                     __StateMachineTransitionToken(()),
                 )
