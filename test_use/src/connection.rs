@@ -123,7 +123,8 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transition()()
+        // self.transition()()
+        self.with(<_>::prove()).transition()()
     }
 
     pub(crate) fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str {

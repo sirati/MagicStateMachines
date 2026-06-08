@@ -4,17 +4,44 @@ use crate::{
 };
 
 /// Classifies state marker types.
-pub trait StateKind {}
+pub trait StateKind {
+    type Proof<T, From, Marker, To>
+    where
+        T: StateMachineImpl,
+        From: StateTrait + UnionTransitionProof<T, Marker, To>,
+        Marker: StateUnionDiscriminant
+            + StateUnionSharedEffect<T, To>
+            + StateMarker<Kind = UnionStateKind>,
+        To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
+}
 
 /// Marker kind for concrete state ZSTs.
 pub struct ConcreteStateKind;
 
-impl StateKind for ConcreteStateKind {}
+impl StateKind for ConcreteStateKind {
+    type Proof<T, From, Marker, To> = ()
+    where
+        T: StateMachineImpl,
+        From: StateTrait + UnionTransitionProof<T, Marker, To>,
+        Marker: StateUnionDiscriminant
+            + StateUnionSharedEffect<T, To>
+            + StateMarker<Kind = UnionStateKind>,
+        To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
+}
 
 /// Marker kind for generated union state ZSTs.
 pub struct UnionStateKind;
 
-impl StateKind for UnionStateKind {}
+impl StateKind for UnionStateKind {
+    type Proof<T, From, Marker, To> = crate::StateUnionTransitionProof<T, From, Marker, To>
+    where
+        T: StateMachineImpl,
+        From: StateTrait + UnionTransitionProof<T, Marker, To>,
+        Marker: StateUnionDiscriminant
+            + StateUnionSharedEffect<T, To>
+            + StateMarker<Kind = UnionStateKind>,
+        To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
+}
 
 /// Common trait implemented by concrete states and generated union markers.
 pub trait StateMarker {

@@ -400,6 +400,9 @@ macro_rules! __StateUnion {
         }
     };
     (@into_enum_method $marker:ident) => {
+        type Marker: $crate::StateUnionDiscriminant
+            + $crate::StateMarker<Kind = $crate::UnionStateKind>;
+
         #[must_use]
         fn into_enum<Storage, T>(
             state: $crate::State<Storage, T, Self>,
@@ -410,7 +413,12 @@ macro_rules! __StateUnion {
             T: $crate::StateMachineImpl;
 
         #[must_use]
-        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
+        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
+            T,
+            Self,
+            $marker,
+            To,
+        >
         where
             Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
             T: $crate::StateMachineImpl,
@@ -502,6 +510,8 @@ macro_rules! __StateUnion {
 
     };
     (@into_enum_identity_impl $marker:ident) => {
+        type Marker = $marker;
+
         fn into_enum<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::DiscriminatedState<Storage, T, $marker>
@@ -526,7 +536,12 @@ macro_rules! __StateUnion {
             }
         }
 
-        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
+        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
+            T,
+            Self,
+            $marker,
+            To,
+        >
         where
             Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
             T: $crate::StateMachineImpl,
@@ -538,6 +553,8 @@ macro_rules! __StateUnion {
         }
     };
     (@into_enum_variant_impl $marker:ident $variant:ident) => {
+        type Marker = $marker;
+
         fn into_enum<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::DiscriminatedState<Storage, T, $marker>
@@ -554,7 +571,12 @@ macro_rules! __StateUnion {
             }
         }
 
-        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $marker, To>
+        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
+            T,
+            Self,
+            $marker,
+            To,
+        >
         where
             Self: Sized + $crate::UnionTransitionProof<T, $marker, To>,
             T: $crate::StateMachineImpl,
@@ -569,6 +591,8 @@ macro_rules! __StateUnion {
         @into_enum_union_variant_impl $source:ident => $target:ident:
         $first:ident $(| $state:ident)*
     ) => {
+        type Marker = $target;
+
         fn into_enum<Storage, T>(
             state: $crate::State<Storage, T, Self>,
         ) -> $crate::DiscriminatedState<Storage, T, $target>
@@ -599,7 +623,12 @@ macro_rules! __StateUnion {
             }
         }
 
-        fn prove<T, To>() -> $crate::StateUnionTransitionProof<T, Self, $target, To>
+        fn prove<T, To>() -> <$crate::UnionStateKind as $crate::StateKind>::Proof<
+            T,
+            Self,
+            $target,
+            To,
+        >
         where
             Self: Sized + $crate::UnionTransitionProof<T, $target, To>,
             T: $crate::StateMachineImpl,
