@@ -2,7 +2,7 @@ use crate::state_trait::ErasedState;
 use core::fmt;
 use core::ops::{Deref, DerefMut};
 use std::cell::{BorrowError, BorrowMutError, Ref, RefCell, RefMut};
-use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 
 /// The state marker and runtime data held by a shared-storage backend.
 ///
@@ -146,11 +146,11 @@ impl SharedStorage for MutexStorage {
     where
         T: 'a;
     type ReadError<'a, T>
-        = PoisonError<MutexGuard<'a, SharedValue<T>>>
+        = TryLockError<MutexGuard<'a, SharedValue<T>>>
     where
         T: 'a;
     type WriteError<'a, T>
-        = PoisonError<MutexGuard<'a, SharedValue<T>>>
+        = TryLockError<MutexGuard<'a, SharedValue<T>>>
     where
         T: 'a;
 
@@ -161,13 +161,13 @@ impl SharedStorage for MutexStorage {
     fn read<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::ReadGuard<'_, T>, Self::ReadError<'_, T>> {
-        storage.lock()
+        storage.try_lock()
     }
 
     fn write<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::WriteGuard<'_, T>, Self::WriteError<'_, T>> {
-        storage.lock()
+        storage.try_lock()
     }
 }
 
@@ -184,11 +184,11 @@ impl SharedStorage for RwLockStorage {
     where
         T: 'a;
     type ReadError<'a, T>
-        = PoisonError<RwLockReadGuard<'a, SharedValue<T>>>
+        = TryLockError<RwLockReadGuard<'a, SharedValue<T>>>
     where
         T: 'a;
     type WriteError<'a, T>
-        = PoisonError<RwLockWriteGuard<'a, SharedValue<T>>>
+        = TryLockError<RwLockWriteGuard<'a, SharedValue<T>>>
     where
         T: 'a;
 
@@ -199,12 +199,12 @@ impl SharedStorage for RwLockStorage {
     fn read<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::ReadGuard<'_, T>, Self::ReadError<'_, T>> {
-        storage.read()
+        storage.try_read()
     }
 
     fn write<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::WriteGuard<'_, T>, Self::WriteError<'_, T>> {
-        storage.write()
+        storage.try_write()
     }
 }

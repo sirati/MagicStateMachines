@@ -1,6 +1,6 @@
 use crate::connection::Connection;
 use statemachines::{SArc, SharedStorage, SharedValue, StateUnionState};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard, TryLockError};
 use test_def::{
     Online,
     states::{Connected, Disconnected},
@@ -20,11 +20,11 @@ impl SharedStorage for CustomMutexStorage {
     where
         T: 'a;
     type ReadError<'a, T>
-        = PoisonError<MutexGuard<'a, SharedValue<T>>>
+        = TryLockError<MutexGuard<'a, SharedValue<T>>>
     where
         T: 'a;
     type WriteError<'a, T>
-        = PoisonError<MutexGuard<'a, SharedValue<T>>>
+        = TryLockError<MutexGuard<'a, SharedValue<T>>>
     where
         T: 'a;
 
@@ -35,13 +35,13 @@ impl SharedStorage for CustomMutexStorage {
     fn read<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::ReadGuard<'_, T>, Self::ReadError<'_, T>> {
-        storage.lock()
+        storage.try_lock()
     }
 
     fn write<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::WriteGuard<'_, T>, Self::WriteError<'_, T>> {
-        storage.lock()
+        storage.try_lock()
     }
 }
 
@@ -54,8 +54,10 @@ pub(crate) fn run() {
         drop(connected);
     }
 
-    let connected = alias.borrow::<Connected>().expect("committed state");
-    println!("{} uses the custom mutex backend", connected.raw_endpoint());
+    {
+        let connected = alias.borrow::<Connected>().expect("committed state");
+        println!("{} uses the custom mutex backend", connected.raw_endpoint());
+    }
 
     let online = alias
         .borrow::<StateUnionState<Online>>()

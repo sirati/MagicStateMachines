@@ -10,7 +10,7 @@ use core::mem::{align_of, size_of};
 use core::pin::Pin;
 use std::cell::BorrowError;
 use std::rc::UniqueRc;
-use std::sync::UniqueArc;
+use std::sync::{TryLockError, UniqueArc};
 
 struct Machine;
 struct Ready;
@@ -321,6 +321,24 @@ fn arc_state_guard_commits_transition_on_drop() {
         Err(SharedStateError::WrongState(_))
     ));
     assert_eq!(alias.borrow::<Running>().expect("committed state").value, 5);
+}
+
+#[test]
+fn mutex_state_reports_native_error_when_already_borrowed() {
+    let state = SArcMutex::new::<Ready>(SharedRuntime { value: 6 });
+    let alias = state.clone();
+    let guard = state.borrow::<Ready>().expect("initial state");
+
+    match alias.borrow::<Ready>() {
+        Err(SharedStateError::Storage(TryLockError::WouldBlock)) => {}
+        Err(SharedStateError::Storage(TryLockError::Poisoned(_))) => {
+            panic!("mutex should not be poisoned")
+        }
+        Err(SharedStateError::WrongState(_)) => panic!("state should still be ready"),
+        Ok(_) => panic!("second mutex borrow should not succeed"),
+    }
+
+    drop(guard);
 }
 
 #[test]
