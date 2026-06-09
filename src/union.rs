@@ -29,7 +29,7 @@ impl<Marker> !StateUnionConcreteState for StateUnionState<Marker> {}
 pub trait StateUnionMember<State> {}
 
 /// Selects the value-carrying discriminated state type for a union marker.
-pub trait StateUnionDiscriminant: Sized {
+pub trait StateUnionDiscriminant: Sized + StateMarker<Kind = UnionStateKind> {
     type Discriminator: Copy + 'static;
 
     type Enum<Storage, T>
@@ -59,7 +59,7 @@ where
         Self: Sized,
         Storage: StateStorage,
         T: StateMachineImpl,
-        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>;
+        Marker: StateUnionDiscriminant;
 
     #[doc(hidden)]
     #[must_use]
@@ -86,7 +86,7 @@ where
         Self: Sized,
         Storage: StateStorage,
         T: StateMachineImpl,
-        StateMarkerType: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+        StateMarkerType: StateUnionDiscriminant,
     {
         unreachable!("concrete identity states are not generated state unions")
     }

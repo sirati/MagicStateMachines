@@ -26,6 +26,7 @@ mod state_trait;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 mod union;
+mod util;
 
 pub use contract::{Initial, StateMachineImpl, Transition};
 #[cfg(feature = "decompose")]
@@ -38,8 +39,9 @@ pub use proof::{
 };
 pub use shared::{
     MutexStorage, RefCellStorage, RwLockStorage, SArc, SArcMutex, SArcRwLock, SMutView, SMutex,
-    SRc, SRcRefCell, SRefCell, SRwLock, SharedBorrowState, SharedState, SharedStateError,
-    SharedStorage, SharedValue, StateMut, StateMutTransitionCall, StateRef, StorageStateMut,
+    SRc, SRcRefCell, SRefCell, SRwLock, WeakSArc, WeakSArcMutex, WeakSArcRwLock, WeakSRc,
+    WeakSRcRefCell, SharedBorrowState, SharedState, SharedStateError, SharedStorage, SharedValue,
+    StateMut, StateMutTransitionCall, StateRef, StorageStateMut,
     WrongStateError, transition_mut,
 };
 pub use state::{
@@ -75,6 +77,7 @@ pub use union::{
     discriminated_state_discriminator, rediscriminate_union_state, state_union_discriminator,
     undiscriminate_state,
 };
+pub use util::EnumExt;
 #[doc(hidden)]
 pub use proof::StateUnionTransitionProof;
 pub use union::{DiscriminatedState, In, StateUnionDiscriminant};

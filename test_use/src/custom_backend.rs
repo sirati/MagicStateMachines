@@ -54,6 +54,13 @@ pub(crate) fn run() {
         drop(connected);
     }
 
+    // if let Ok(guard) = shared.borrow_mut::<Online>() {
+    //     match Online.into_enum(guard) {
+    //         test_def::OnlineEnum::Connected(x) => x.into_state();
+    //         test_def::OnlineEnum::Authenticated(x) => todo!();
+    //     }
+    // }
+
     {
         let connected = alias.borrow::<Connected>().expect("committed state");
         println!("{} uses the custom mutex backend", connected.raw_endpoint());

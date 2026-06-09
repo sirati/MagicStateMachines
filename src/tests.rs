@@ -288,6 +288,21 @@ fn rc_state_guard_commits_transition_on_drop() {
 }
 
 #[test]
+fn rc_state_weak_handle_upgrades_until_last_strong_handle_drops() {
+    let state = SRcRefCell::new::<Ready>(SharedRuntime { value: 7 });
+    let weak = state.downgrade();
+
+    let upgraded = weak.upgrade().expect("strong handle is still alive");
+    assert_eq!(upgraded.borrow::<Ready>().expect("ready state").value, 7);
+
+    drop(state);
+    assert!(weak.upgrade().is_some());
+
+    drop(upgraded);
+    assert!(weak.upgrade().is_none());
+}
+
+#[test]
 fn rc_state_borrows_committed_state_through_erased_union() {
     let state = SRcRefCell::new::<Ready>(SharedRuntime { value: 10 });
     let alias = state.clone();
@@ -328,6 +343,21 @@ fn arc_state_guard_commits_transition_on_drop() {
         Err(SharedStateError::WrongState(_))
     ));
     assert_eq!(alias.borrow::<Running>().expect("committed state").value, 5);
+}
+
+#[test]
+fn arc_state_weak_handle_upgrades_until_last_strong_handle_drops() {
+    let state = SArcMutex::new::<Ready>(SharedRuntime { value: 8 });
+    let weak = state.downgrade();
+
+    let upgraded = weak.upgrade().expect("strong handle is still alive");
+    assert_eq!(upgraded.borrow::<Ready>().expect("ready state").value, 8);
+
+    drop(state);
+    assert!(weak.upgrade().is_some());
+
+    drop(upgraded);
+    assert!(weak.upgrade().is_none());
 }
 
 #[test]

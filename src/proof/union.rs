@@ -1,7 +1,6 @@
 use crate::{
     ConcreteStateKind, State, StateMachineImpl, StateMarker, StateStorage, StateTrait,
     StateUnionDiscriminant, StateUnionErased, StateUnionSharedEffect, StateUnionTransition,
-    UnionStateKind,
 };
 use core::marker::PhantomData;
 
@@ -57,7 +56,7 @@ where
 pub trait UnionTransitionProof<T, TUnion, TTo>: StateMarker
 where
     T: StateMachineImpl,
-    TUnion: StateMarker<Kind = UnionStateKind> + StateUnionDiscriminant,
+    TUnion: StateUnionDiscriminant,
     TTo: StateMarker<Kind = ConcreteStateKind>,
 {
 }
@@ -66,8 +65,7 @@ impl<T, From, TUnion, TTo> UnionTransitionProof<T, TUnion, TTo> for From
 where
     T: StateMachineImpl,
     From: StateMarker + StateTrait + StateUnionErased<TUnion>,
-    TUnion: StateMarker<Kind = UnionStateKind>
-        + StateUnionDiscriminant
+    TUnion: StateUnionDiscriminant
         + StateUnionTransition<T::Standin, TTo>
         + StateUnionSharedEffect<T, TTo>,
     TTo: StateMarker<Kind = ConcreteStateKind> + StateTrait,

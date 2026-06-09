@@ -1,5 +1,6 @@
 mod guard;
 mod storage;
+mod weak;
 
 use crate::{Initial, SOwned, State, StateMachineImpl, state_trait};
 use core::marker::PhantomData;
@@ -13,15 +14,18 @@ pub use storage::{
     MutexStorage, RefCellStorage, RwLockStorage, SharedStateError, SharedStorage, SharedValue,
     WrongStateError,
 };
+pub use weak::{
+    WeakSArc, WeakSArcMutex, WeakSArcRwLock, WeakSRc, WeakSRcRefCell,
+};
 
 /// Shared state using an explicit, replaceable storage backend.
 pub struct SharedState<P, S, T>
 where
     S: SharedStorage,
 {
-    storage: P,
-    backend: PhantomData<fn() -> S>,
-    value: PhantomData<fn() -> T>,
+    pub(super) storage: P,
+    pub(super) backend: PhantomData<fn() -> S>,
+    pub(super) value: PhantomData<fn() -> T>,
 }
 
 impl<P: Clone, S: SharedStorage, T> Clone for SharedState<P, S, T> {

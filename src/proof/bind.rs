@@ -2,7 +2,7 @@ use crate::{
     ConcreteStateKind, State, StateConcreteProvenState, StateConcreteTransitionProof,
     StateMachineImpl, StateMarker, StateStorage, StateTrait, StateUnionDiscriminant,
     StateUnionErased, StateUnionProvenState, StateUnionSharedEffect, StateUnionTransitionProof,
-    Transition, TransitionEffectSelector, UnionStateKind, UnionTransitionProof,
+    Transition, TransitionEffectSelector, UnionTransitionProof,
 };
 use core::marker::PhantomData;
 
@@ -25,7 +25,7 @@ where
     T: StateMachineImpl,
     Storage: StateStorage,
     From: StateTrait + StateUnionErased<Marker> + UnionTransitionProof<T, Marker, To>,
-    Marker: StateUnionSharedEffect<T, To> + StateMarker<Kind = UnionStateKind>,
+    Marker: StateUnionSharedEffect<T, To>,
     To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
 {
     type Output = StateUnionProvenState<Storage, T, From, Marker, To>;
@@ -46,7 +46,7 @@ where
     Storage: StateStorage,
     T::Standin: Transition<From, To>,
     From: StateTrait + StateMarker<Kind = ConcreteStateKind>,
-    Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+    Marker: StateUnionDiscriminant,
     To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
 {
     type Output = StateConcreteProvenState<Storage, T, From, Marker, To>;

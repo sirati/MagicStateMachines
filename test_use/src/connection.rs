@@ -1,4 +1,6 @@
-use magicstatemachines::{DiscriminatedState, In, SMut, SOwned, SRef, SResult, State, StateMachineImpl};
+use magicstatemachines::{
+    DiscriminatedState, In, SMut, SOwned, SRef, SResult, State, StateMachineImpl,
+};
 use test_def::{
     AllMarker, ConnectionStandin, InOnline, Online,
     states::{Authenticated, Connected, Disconnected},
@@ -108,7 +110,10 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transitionExp2(Online)()
+        match <_>::into_enum(self).discriminate() {
+            test_def::OnlineEnum::Connected(x) => x.into_state().transition()(),
+            test_def::OnlineEnum::Authenticated(x) => x.into_state().transition()(),
+        }
     }
 
     #[must_use]

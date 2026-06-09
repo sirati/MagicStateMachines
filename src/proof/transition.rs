@@ -3,7 +3,7 @@ use crate::{
     StateMarker, StateStorage, StateTrait, StateUnionConcreteState, StateUnionDiscriminant,
     State, StateUnionErased, StateUnionProofTransitionCall, StateUnionSharedEffect,
     StateUnionTransitionProof, StateWithProof, StateKind, Transition, TransitionEffectSelector,
-    TransitionProof, UnionStateKind, transition_state_with_concrete_transition_proof,
+    TransitionProof, transition_state_with_concrete_transition_proof,
     transition_state_with_erased_transition_proof,
 };
 
@@ -13,7 +13,7 @@ where
     T: StateMachineImpl,
     Storage: StateStorage,
     From: StateTrait,
-    Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+    Marker: StateUnionDiscriminant,
     To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
 {
     type Call;
@@ -45,7 +45,7 @@ where
     Storage: StateStorage,
     T::Standin: Transition<From, To>,
     From: StateTrait + StateMarker<Kind = ConcreteStateKind> + StateUnionConcreteState,
-    Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+    Marker: StateUnionDiscriminant,
     To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
 {
     type Call = EffectTransitionCall<
@@ -76,9 +76,7 @@ where
     T: StateMachineImpl,
     Storage: StateStorage,
     From: StateTrait + StateUnionErased<Marker>,
-    Marker: StateUnionDiscriminant
-        + StateMarker<Kind = UnionStateKind>
-        + StateUnionSharedEffect<T, To>,
+    Marker: StateUnionDiscriminant + StateUnionSharedEffect<T, To>,
     To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
 {
     type Call = StateUnionProofTransitionCall<Storage, T, From, Marker, To>;
@@ -104,7 +102,7 @@ where
     T: StateMachineImpl,
     Storage: StateStorage,
     From: StateTrait + StateMarker<Kind = Inner>,
-    Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+    Marker: StateUnionDiscriminant,
     To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
     Inner: StateKind,
     Inner::Proof<T, From, Marker, To>: StateProofTransition<Storage, T, From, Marker, To>,

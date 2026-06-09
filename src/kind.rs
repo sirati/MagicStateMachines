@@ -9,7 +9,7 @@ pub trait StateKind: Sized {
     where
         T: StateMachineImpl,
         From: StateTrait + StateMarker<Kind = Self>,
-        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+        Marker: StateUnionDiscriminant,
         To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
 
     #[doc(hidden)]
@@ -19,7 +19,7 @@ pub trait StateKind: Sized {
         Storage: StateStorage,
         T: StateMachineImpl,
         From: StateTrait + StateMarker<Kind = Self>,
-        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+        Marker: StateUnionDiscriminant,
         To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
     {
         TransitionProof::new()
@@ -35,7 +35,7 @@ impl StateKind for ConcreteStateKind {
     where
         T: StateMachineImpl,
         From: StateTrait + StateMarker<Kind = Self>,
-        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+        Marker: StateUnionDiscriminant,
         To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
 }
 
@@ -48,7 +48,7 @@ impl StateKind for UnionStateKind {
     where
         T: StateMachineImpl,
         From: StateTrait + StateMarker<Kind = Self>,
-        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
+        Marker: StateUnionDiscriminant,
         To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
 }
 

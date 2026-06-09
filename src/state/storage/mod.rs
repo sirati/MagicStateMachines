@@ -354,9 +354,7 @@ where
     T: StateMachineImpl,
     Storage: SMut,
     From: crate::StateTrait + crate::StateMarker + crate::In<Marker>,
-    Marker: StateUnionDiscriminant
-        + crate::StateMarker<Kind = UnionStateKind>
-        + StateUnionDiscriminatedTransition<T, To, Args>,
+    Marker: StateUnionDiscriminant + StateUnionDiscriminatedTransition<T, To, Args>,
     Args: core::marker::Tuple,
     To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
 {
