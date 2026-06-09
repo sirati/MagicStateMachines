@@ -9,14 +9,14 @@ pub(crate) fn run() {
         Err(_) => return,
     };
     let connection = match connection.as_online_enum().discriminate() {
-        OnlineEnum::Connected(connection) => connection.into_state(),
+        OnlineEnum::Connected(connection) => connection,
         OnlineEnum::Authenticated(_) => return,
     };
     let online = connection.authenticate_if(Some("alice".into()));
     println!("{} is online", online.endpoint());
 
     let connection = match online.discriminate() {
-        OnlineEnum::Authenticated(connection) => connection.into_state(),
+        OnlineEnum::Authenticated(connection) => connection,
         OnlineEnum::Connected(_) => return,
     };
 

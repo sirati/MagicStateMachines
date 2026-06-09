@@ -13,8 +13,7 @@ macro_rules! __StateUnion {
                 type Kind = $crate::UnionStateKind;
 
                 fn erased_state() -> &'static dyn $crate::StateTrait {
-                    static STATE: $marker = $marker;
-                    &STATE
+                    panic!("union state markers cannot be stored as ErasedState")
                 }
             }
 
@@ -193,8 +192,7 @@ macro_rules! __StateUnion {
                 type Kind = $crate::UnionStateKind;
 
                 fn erased_state() -> &'static dyn $crate::StateTrait {
-                    static STATE: $marker = $marker;
-                    &STATE
+                    panic!("union state markers cannot be stored as ErasedState")
                 }
             }
 
@@ -320,7 +318,7 @@ macro_rules! __StateUnion {
         where
             T: $crate::StateMachineImpl
                 + $crate::TransitionEffectSelector<$first, To>,
-            To: $crate::StateTrait,
+            To: $crate::ConcreteStateTrait,
             <T as $crate::TransitionEffectSelector<$first, To>>::Effect:
                 $crate::TransitionEffect<T, $first, To, Args>,
             $(
@@ -336,42 +334,43 @@ macro_rules! __StateUnion {
             ) -> $crate::State<Storage, T, To>
             where
                 Storage: $crate::SMut,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
             {
-                $crate::__private::paste! {
-                    let discriminator = $crate::discriminated_state_discriminator(&state);
-                    match discriminator {
-                        [<$marker Discriminator>]::$first => {
+                let inferred_state_type = $crate::erased_state_type_id(
+                    &$crate::discriminated_state_marker(&state),
+                );
+                match inferred_state_type {
+                    state_type if state_type == ::core::any::TypeId::of::<$first>() => {
+                        let state =
+                            $crate::concretize_discriminated_state::<Storage, T, $marker, $first>(
+                                state,
+                            );
+                        $crate::transition_concrete_after_effect::<
+                            Storage,
+                            T,
+                            $first,
+                            To,
+                            Args,
+                            <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
+                        >(state, args, callsite)
+                    }
+                    $(
+                        state_type if state_type == ::core::any::TypeId::of::<$state>() => {
                             let state =
-                                $crate::concretize_discriminated_state::<Storage, T, $marker, $first>(
+                                $crate::concretize_discriminated_state::<Storage, T, $marker, $state>(
                                     state,
                                 );
                             $crate::transition_concrete_after_effect::<
                                 Storage,
                                 T,
-                                $first,
+                                $state,
                                 To,
                                 Args,
-                                <T as $crate::TransitionEffectSelector<$first, To>>::Effect,
+                                <T as $crate::TransitionEffectSelector<$state, To>>::Effect,
                             >(state, args, callsite)
                         }
-                        $(
-                            [<$marker Discriminator>]::$state => {
-                                let state =
-                                    $crate::concretize_discriminated_state::<Storage, T, $marker, $state>(
-                                        state,
-                                    );
-                                $crate::transition_concrete_after_effect::<
-                                    Storage,
-                                    T,
-                                    $state,
-                                    To,
-                                    Args,
-                                    <T as $crate::TransitionEffectSelector<$state, To>>::Effect,
-                                >(state, args, callsite)
-                            }
-                        )*
-                    }
+                    )*
+                    _ => unreachable!("state union inferred a state outside of its variants"),
                 }
             }
         }
@@ -384,7 +383,7 @@ macro_rules! __StateUnion {
         where
             T: $crate::StateMachineImpl
                 + $crate::TransitionEffectSelector<$first, To>,
-            To: $crate::StateTrait,
+            To: $crate::ConcreteStateTrait,
             $marker: $crate::StateUnionTransition<T::Standin, To>,
             $(
                 T: $crate::TransitionEffectSelector<
@@ -402,7 +401,7 @@ macro_rules! __StateUnion {
         where
             T: $crate::StateMachineImpl
                 + $crate::TransitionEffectSelector<$first, To>,
-            To: $crate::StateTrait,
+            To: $crate::ConcreteStateTrait,
             $marker: $crate::StateUnionSharedEffect<
                 T,
                 To,
@@ -444,20 +443,7 @@ macro_rules! __StateUnion {
             T: $crate::StateMachineImpl,
             $marker: $crate::StateUnionDiscriminant,
         {
-            $crate::__private::paste! {
-                let discriminator =
-                    $crate::state_union_discriminator::<
-                        Storage,
-                        T,
-                        Self,
-                        [<$marker Discriminator>],
-                    >(&state)
-                    .expect("state union discriminator is unavailable");
-                $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(
-                    state,
-                    discriminator,
-                )
-            }
+            $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(state)
         }
 
     };
@@ -471,12 +457,7 @@ macro_rules! __StateUnion {
             T: $crate::StateMachineImpl,
             $marker: $crate::StateUnionDiscriminant,
         {
-            $crate::__private::paste! {
-                $crate::discriminate_state::<Storage, T, Self, $marker>(
-                    state,
-                    [<$marker Discriminator>]::$variant,
-                )
-            }
+            $crate::discriminate_state::<Storage, T, Self, $marker>(state)
         }
 
     };
@@ -493,26 +474,7 @@ macro_rules! __StateUnion {
             T: $crate::StateMachineImpl,
             $target: $crate::StateUnionDiscriminant,
         {
-            $crate::__private::paste! {
-                let discriminator =
-                    $crate::state_union_discriminator::<
-                        Storage,
-                        T,
-                        Self,
-                        [<$source Discriminator>],
-                    >(&state)
-                    .expect("state union discriminator is unavailable");
-                let discriminator = match discriminator {
-                    [<$source Discriminator>]::$first => [<$target Discriminator>]::$first,
-                    $(
-                        [<$source Discriminator>]::$state => [<$target Discriminator>]::$state,
-                    )*
-                };
-                $crate::rediscriminate_union_state::<Storage, T, $source, $target>(
-                    state,
-                    discriminator,
-                )
-            }
+            $crate::rediscriminate_union_state::<Storage, T, $source, $target>(state)
         }
 
     };
@@ -525,20 +487,7 @@ macro_rules! __StateUnion {
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            $crate::__private::paste! {
-                let discriminator =
-                    $crate::state_union_discriminator::<
-                        Storage,
-                        T,
-                        Self,
-                        [<$marker Discriminator>],
-                    >(&state)
-                    .expect("state union discriminator is unavailable");
-                $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(
-                    state,
-                    discriminator,
-                )
-            }
+            $crate::rediscriminate_union_state::<Storage, T, $marker, $marker>(state)
         }
 
     };
@@ -551,12 +500,7 @@ macro_rules! __StateUnion {
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            $crate::__private::paste! {
-                $crate::discriminate_state::<Storage, T, Self, $marker>(
-                    state,
-                    [<$marker Discriminator>]::$variant,
-                )
-            }
+            $crate::discriminate_state::<Storage, T, Self, $marker>(state)
         }
 
     };
@@ -572,26 +516,7 @@ macro_rules! __StateUnion {
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
-            $crate::__private::paste! {
-                let discriminator =
-                    $crate::state_union_discriminator::<
-                        Storage,
-                        T,
-                        Self,
-                        [<$source Discriminator>],
-                    >(&state)
-                    .expect("state union discriminator is unavailable");
-                let discriminator = match discriminator {
-                    [<$source Discriminator>]::$first => [<$target Discriminator>]::$first,
-                    $(
-                        [<$source Discriminator>]::$state => [<$target Discriminator>]::$state,
-                    )*
-                };
-                $crate::rediscriminate_union_state::<Storage, T, $source, $target>(
-                    state,
-                    discriminator,
-                )
-            }
+            $crate::rediscriminate_union_state::<Storage, T, $source, $target>(state)
         }
 
     };

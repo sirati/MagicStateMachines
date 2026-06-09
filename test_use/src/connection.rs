@@ -111,8 +111,8 @@ impl Connection {
         S: SMut,
     {
         match <_>::into_enum(self).discriminate() {
-            test_def::OnlineEnum::Connected(x) => x.into_state().transition()(),
-            test_def::OnlineEnum::Authenticated(x) => x.into_state().transition()(),
+            test_def::OnlineEnum::Connected(x) => x.transition()(),
+            test_def::OnlineEnum::Authenticated(x) => x.transition()(),
         }
     }
 

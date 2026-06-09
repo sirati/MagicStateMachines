@@ -48,7 +48,7 @@ impl StateStorage for StorageStateOwned {
     where
         T: StateMachineImpl,
         From: crate::StateTrait,
-        To: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple,
@@ -66,7 +66,7 @@ impl StateStorage for StorageStateOwned {
     where
         T: StateMachineImpl,
         From: crate::StateTrait,
-        To: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
     {
         State {
             inner: complete_transition(state.inner, callsite),
@@ -132,7 +132,7 @@ macro_rules! indirect_owned_storage {
             where
                 T: StateMachineImpl,
                 From: crate::StateTrait,
-                To: crate::StateTrait,
+                To: crate::ConcreteStateTrait,
                 T::Standin: Transition<From, To>,
                 <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
                 Args: core::marker::Tuple,
@@ -150,7 +150,7 @@ macro_rules! indirect_owned_storage {
             where
                 T: StateMachineImpl,
                 From: crate::StateTrait,
-                To: crate::StateTrait,
+                To: crate::ConcreteStateTrait,
             {
                 State {
                     inner: complete_transition(state.inner, callsite),
@@ -220,7 +220,7 @@ impl StateStorage for StorageStateOwnedPinBox {
     where
         T: StateMachineImpl,
         From: crate::StateTrait,
-        To: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple,
@@ -238,7 +238,7 @@ impl StateStorage for StorageStateOwnedPinBox {
     where
         T: StateMachineImpl,
         From: crate::StateTrait,
-        To: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
     {
         State {
             inner: complete_transition(state.inner, callsite),

@@ -26,8 +26,8 @@ mod tests {
     use super::connectable::{Connectable, ConnectionViaTrait};
     use super::connection::Connection;
     use super::connection_async::ConnectionAsync;
-    use magicstatemachines::In;
-    use test_def::{Online, OnlineDiscriminator, OnlineEnum};
+    use magicstatemachines::{In, StateUnionDiscriminant};
+    use test_def::{Online, OnlineEnum};
 
     fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
         let mut future = pin!(future);
@@ -130,10 +130,18 @@ mod tests {
     }
 
     #[test]
-    fn online_enum_deref_carries_discriminator_in_storage() {
+    fn online_marker_names_its_enum_type() {
+        let marker_enum: Option<
+            <Online as StateUnionDiscriminant>::Enum<magicstatemachines::SOwned, Connection>,
+        > = None;
+        let _: Option<OnlineEnum<magicstatemachines::SOwned, Connection>> = marker_enum;
+    }
+
+    #[test]
+    fn online_enum_deref_carries_inferred_state_in_storage() {
         fn expect_discriminated_storage(
             _state: &magicstatemachines::State<
-                magicstatemachines::SDiscriminated<magicstatemachines::SOwned, OnlineDiscriminator>,
+                magicstatemachines::SDiscriminated<magicstatemachines::SOwned>,
                 Connection,
                 magicstatemachines::StateUnionState<Online>,
             >,

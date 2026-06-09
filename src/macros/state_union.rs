@@ -45,7 +45,9 @@
 ///
 /// `DiscriminatedState<Storage, T, Online>` carries the concrete variant in
 /// its storage. Calling `discriminate()` recovers the generated enum when
-/// runtime branching is needed.
+/// runtime branching is needed. The marker also names that enum through
+/// `StateUnionDiscriminant`, so
+/// `<Online as StateUnionDiscriminant>::Enum<Storage, T>` is `OnlineEnum<Storage, T>`.
 #[macro_export]
 macro_rules! StateUnion {
     (

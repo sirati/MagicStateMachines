@@ -5,6 +5,10 @@ use crate::{
 
 /// Classifies state marker types.
 pub trait StateKind: Sized {
+    type RuntimeState<Marker>: StateTrait + StateMarker
+    where
+        Marker: StateRuntimeMarkerFor<Self>;
+
     type Proof<T, From, Marker, To>
     where
         T: StateMachineImpl,
@@ -30,6 +34,11 @@ pub trait StateKind: Sized {
 pub struct ConcreteStateKind;
 
 impl StateKind for ConcreteStateKind {
+    type RuntimeState<Marker>
+        = <Marker as StateRuntimeMarkerFor<Self>>::RuntimeState
+    where
+        Marker: StateRuntimeMarkerFor<Self>;
+
     type Proof<T, From, Marker, To>
         = crate::StateConcreteTransitionProof<T, From, Marker, To>
     where
@@ -43,6 +52,11 @@ impl StateKind for ConcreteStateKind {
 pub struct UnionStateKind;
 
 impl StateKind for UnionStateKind {
+    type RuntimeState<Marker>
+        = <Marker as StateRuntimeMarkerFor<Self>>::RuntimeState
+    where
+        Marker: StateRuntimeMarkerFor<Self>;
+
     type Proof<T, From, Marker, To>
         = StateUnionTransitionProof<T, From, Marker, To>
     where
@@ -69,6 +83,29 @@ where
     type Kind = UnionStateKind;
 
     fn erased_state() -> &'static dyn StateTrait {
-        Box::leak(Box::new(StateUnionState::<Marker>::new()))
+        panic!("union state markers cannot be stored as ErasedState")
     }
 }
+
+#[doc(hidden)]
+pub trait StateRuntimeMarkerFor<Kind: StateKind>: StateTrait + StateMarker {
+    type RuntimeState: StateTrait + StateMarker;
+}
+
+impl<Marker> StateRuntimeMarkerFor<ConcreteStateKind> for Marker
+where
+    Marker: StateTrait + StateMarker<Kind = ConcreteStateKind>,
+{
+    type RuntimeState = Marker;
+}
+
+impl<Marker> StateRuntimeMarkerFor<UnionStateKind> for Marker
+where
+    Marker: StateUnionDiscriminant + StateTrait,
+    StateUnionState<Marker>: StateTrait,
+{
+    type RuntimeState = StateUnionState<Marker>;
+}
+
+pub type RuntimeStateMarker<Marker> =
+    <<Marker as StateMarker>::Kind as StateKind>::RuntimeState<Marker>;

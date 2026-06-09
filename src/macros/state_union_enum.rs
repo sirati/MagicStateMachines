@@ -44,18 +44,6 @@ macro_rules! __StateUnionEnum {
         @enum $enum_name:ident $marker:ident:
         $first:ident $(| $state:ident)*
     ) => {
-        $crate::__private::paste! {
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-            #[allow(dead_code)]
-            #[allow(non_camel_case_types)]
-            pub enum [<$marker Discriminator>] {
-                $first,
-                $(
-                    $state,
-                )*
-            }
-        }
-
         #[allow(dead_code)]
         pub enum $enum_name<Storage, T>
         where
@@ -63,34 +51,16 @@ macro_rules! __StateUnionEnum {
             T: $crate::StateMachineImpl,
         {
             $first(
-                $crate::__private::paste! {
-                    $crate::StateUnionVariant<
-                        Storage,
-                        T,
-                        $first,
-                        $marker,
-                        [<$marker Discriminator>],
-                    >
-                }
+                $crate::State<Storage, T, $first>
             ),
             $(
                 $state(
-                    $crate::__private::paste! {
-                        $crate::StateUnionVariant<
-                            Storage,
-                            T,
-                            $state,
-                            $marker,
-                            [<$marker Discriminator>],
-                        >
-                    }
+                    $crate::State<Storage, T, $state>
                 ),
             )*
         }
 
         impl $crate::StateUnionDiscriminant for $marker {
-            type Discriminator = $crate::__private::paste! { [<$marker Discriminator>] };
-
             type Enum<Storage, T>
                 = $enum_name<Storage, T>
             where
@@ -100,7 +70,7 @@ macro_rules! __StateUnionEnum {
             fn discriminate<Storage, T>(
                 state: $crate::__private::paste! {
                     $crate::State<
-                        $crate::SDiscriminated<Storage, [<$marker Discriminator>]>,
+                        $crate::SDiscriminated<Storage>,
                         T,
                         $crate::StateUnionState<$marker>,
                     >
@@ -110,16 +80,27 @@ macro_rules! __StateUnionEnum {
                 Storage: $crate::StateStorage,
                 T: $crate::StateMachineImpl,
             {
-                let discriminator = $crate::discriminated_state_discriminator(&state);
-                match discriminator {
-                    $crate::__private::paste! { [<$marker Discriminator>]::$first } => {
-                        $enum_name::$first($crate::StateUnionVariant::from_erased(state))
+                let inferred_state_type = $crate::erased_state_type_id(
+                    &$crate::discriminated_state_marker(&state),
+                );
+                match inferred_state_type {
+                    state_type if state_type == ::core::any::TypeId::of::<$first>() => {
+                        $enum_name::$first(
+                            $crate::concretize_discriminated_state::<Storage, T, $marker, $first>(
+                                state,
+                            )
+                        )
                     }
                     $(
-                        $crate::__private::paste! { [<$marker Discriminator>]::$state } => {
-                            $enum_name::$state($crate::StateUnionVariant::from_erased(state))
+                        state_type if state_type == ::core::any::TypeId::of::<$state>() => {
+                            $enum_name::$state(
+                                $crate::concretize_discriminated_state::<Storage, T, $marker, $state>(
+                                    state,
+                                )
+                            )
                         }
                     )*
+                    _ => unreachable!("state union inferred a state outside of its variants"),
                 }
             }
         }
@@ -135,15 +116,19 @@ macro_rules! __StateUnionEnum {
                 self,
             ) -> $crate::__private::paste! {
                 $crate::State<
-                    $crate::SDiscriminated<Storage, [<$marker Discriminator>]>,
+                    $crate::SDiscriminated<Storage>,
                     T,
                     $crate::StateUnionState<$marker>,
                 >
             } {
                 match self {
-                    Self::$first(state) => state.into_erased(),
+                    Self::$first(state) => {
+                        $crate::discriminate_state::<Storage, T, $first, $marker>(state)
+                    }
                     $(
-                        Self::$state(state) => state.into_erased(),
+                        Self::$state(state) => {
+                            $crate::discriminate_state::<Storage, T, $state, $marker>(state)
+                        }
                     )*
                 }
             }

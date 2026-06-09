@@ -1,6 +1,6 @@
 use crate::{
-    ConcreteStateKind, State, StateConcreteProvenState, StateConcreteTransitionProof,
-    StateMachineImpl, StateMarker, StateStorage, StateTrait, StateUnionDiscriminant,
+    State, StateConcreteProvenState, StateConcreteTransitionProof,
+    StateMachineImpl, StateStorage, StateTrait, StateUnionDiscriminant,
     StateUnionErased, StateUnionProvenState, StateUnionSharedEffect, StateUnionTransitionProof,
     Transition, TransitionEffectSelector, UnionTransitionProof,
 };
@@ -26,7 +26,7 @@ where
     Storage: StateStorage,
     From: StateTrait + StateUnionErased<Marker> + UnionTransitionProof<T, Marker, To>,
     Marker: StateUnionSharedEffect<T, To>,
-    To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
+    To: crate::ConcreteStateTrait,
 {
     type Output = StateUnionProvenState<Storage, T, From, Marker, To>;
 
@@ -45,9 +45,9 @@ where
     T: StateMachineImpl + TransitionEffectSelector<From, To>,
     Storage: StateStorage,
     T::Standin: Transition<From, To>,
-    From: StateTrait + StateMarker<Kind = ConcreteStateKind>,
+    From: crate::ConcreteStateTrait,
     Marker: StateUnionDiscriminant,
-    To: StateTrait + StateMarker<Kind = ConcreteStateKind>,
+    To: crate::ConcreteStateTrait,
 {
     type Output = StateConcreteProvenState<Storage, T, From, Marker, To>;
 

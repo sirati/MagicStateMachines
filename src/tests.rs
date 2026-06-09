@@ -1,6 +1,6 @@
 use crate::{
     Initial, SArcMutex, SBox, SMove, SOwned, SPinBox, SRcRefCell, SharedStateError, State,
-    StateCopy, StateMachineImpl, StateOwned, StateUnionState, StorageStateOwnedBox,
+    StateCopy, StateMachineImpl, StateOwned, StorageStateOwnedBox,
     StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, Transition,
     transition, transition_state,
 };
@@ -313,14 +313,14 @@ fn rc_state_borrows_committed_state_through_erased_union() {
 
     {
         let erased = alias
-            .borrow::<StateUnionState<Active>>()
+            .borrow::<Active>()
             .expect("running is active");
         assert_eq!(erased.value, 10);
     }
 
     {
         let erased = alias
-            .borrow_mut::<StateUnionState<Active>>()
+            .borrow_mut::<Active>()
             .expect("running is active");
         drop(erased);
     }

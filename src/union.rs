@@ -1,10 +1,8 @@
 use crate::{
-    SMove, SMut, SRef, State, StateMachineImpl, StateMarker, StateStorage, StateTrait, Transition,
-    TransitionCallsite, TransitionProof, UnionStateKind,
+    SMove, SMut, SRef, State, StateInference, StateMachineImpl, StateMarker, StateStorage,
+    StateTrait, Transition, TransitionCallsite, TransitionProof, UnionStateKind, state_trait,
 };
-use core::any::Any;
-use core::marker::PhantomData;
-use core::ops::Deref;
+use core::{any::TypeId, marker::PhantomData};
 
 /// State marker shared by every member of a generated state union.
 #[doc(hidden)]
@@ -30,8 +28,6 @@ pub trait StateUnionMember<State> {}
 
 /// Selects the value-carrying discriminated state type for a union marker.
 pub trait StateUnionDiscriminant: Sized + StateMarker<Kind = UnionStateKind> {
-    type Discriminator: Copy + 'static;
-
     type Enum<Storage, T>
     where
         Storage: StateStorage,
@@ -94,17 +90,13 @@ where
 
 /// Value-carrying discriminated state for a generated union marker.
 pub type DiscriminatedState<Storage, T, Marker> = State<
-    SDiscriminated<Storage, <Marker as StateUnionDiscriminant>::Discriminator>,
+    SDiscriminated<Storage>,
     T,
     StateUnionState<Marker>,
 >;
 
 impl<Storage, T, Marker>
-    State<
-        SDiscriminated<Storage, <Marker as StateUnionDiscriminant>::Discriminator>,
-        T,
-        StateUnionState<Marker>,
-    >
+    State<SDiscriminated<Storage>, T, StateUnionState<Marker>>
 where
     Storage: StateStorage,
     T: StateMachineImpl,
@@ -120,16 +112,22 @@ where
 #[must_use]
 pub fn discriminate_state<Storage, T, From, Marker>(
     state: State<Storage, T, From>,
-    discriminator: <Marker as StateUnionDiscriminant>::Discriminator,
 ) -> DiscriminatedState<Storage, T, Marker>
 where
     Storage: StateStorage,
     T: StateMachineImpl,
+    From: crate::ConcreteStateTrait,
     Marker: StateUnionDiscriminant,
 {
+    let inference =
+        <<Storage::Inference as crate::InferenceKind>::Inference as crate::StateInference>::new::<
+            Storage,
+            T,
+            From,
+        >(&state.inner);
     State::from_inner(DiscriminatedInner {
         inner: Storage::retag(state.inner),
-        discriminator,
+        inference,
     })
 }
 
@@ -137,28 +135,33 @@ where
 #[must_use]
 pub fn rediscriminate_union_state<Storage, T, FromMarker, ToMarker>(
     state: State<Storage, T, StateUnionState<FromMarker>>,
-    discriminator: <ToMarker as StateUnionDiscriminant>::Discriminator,
 ) -> DiscriminatedState<Storage, T, ToMarker>
 where
     Storage: StateStorage,
     T: StateMachineImpl,
+    FromMarker: StateUnionDiscriminant,
+    StateUnionState<FromMarker>: StateTrait,
     ToMarker: StateUnionDiscriminant,
 {
+    let inferred_state = Storage::inferred_state(&state.inner);
+    let inference =
+        <<Storage::Inference as crate::InferenceKind>::Inference as crate::StateInference>::from_erased(
+            inferred_state,
+        );
     State::from_inner(DiscriminatedInner {
         inner: Storage::retag(state.inner),
-        discriminator,
+        inference,
     })
 }
 
 #[doc(hidden)]
 #[must_use]
-pub fn undiscriminate_state<Storage, T, S, Discriminator>(
-    state: State<SDiscriminated<Storage, Discriminator>, T, S>,
+pub fn undiscriminate_state<Storage, T, S>(
+    state: State<SDiscriminated<Storage>, T, S>,
 ) -> State<Storage, T, S>
 where
     Storage: StateStorage,
     T: StateMachineImpl,
-    Discriminator: Copy + 'static,
 {
     State::from_inner(state.inner.inner)
 }
@@ -178,47 +181,57 @@ where
 
 #[doc(hidden)]
 #[must_use]
-pub fn discriminated_state_discriminator<Storage, T, S, Discriminator>(
-    state: &State<SDiscriminated<Storage, Discriminator>, T, S>,
-) -> Discriminator
+pub fn discriminated_state_marker<Storage, T, S>(
+    state: &State<SDiscriminated<Storage>, T, S>,
+) -> state_trait::ErasedState
 where
     Storage: StateStorage,
     T: StateMachineImpl,
-    Discriminator: Copy + 'static,
+    S: StateTrait,
 {
-    state.inner.discriminator
+    state.inner.inference.state::<Storage, T, S>(&state.inner.inner)
 }
 
 #[doc(hidden)]
 #[must_use]
-pub fn state_union_discriminator<Storage, T, S, Discriminator>(
+pub fn state_union_marker<Storage, T, S>(
     state: &State<Storage, T, S>,
-) -> Option<Discriminator>
+) -> state_trait::ErasedState
 where
     Storage: StateStorage,
     T: StateMachineImpl,
-    Discriminator: Copy + 'static,
+    S: StateTrait,
 {
-    Storage::union_discriminator(&state.inner)
+    Storage::inferred_state(&state.inner)
+}
+
+#[doc(hidden)]
+#[must_use]
+pub fn erased_state_type_id(state: &state_trait::ErasedState) -> TypeId {
+    state.type_id()
 }
 
 /// Storage backend that carries a discriminated union variant alongside another backend.
 #[doc(hidden)]
-pub struct SDiscriminated<Storage, Discriminator>(PhantomData<fn() -> (Storage, Discriminator)>);
+pub struct SDiscriminated<Storage>(PhantomData<fn() -> Storage>);
 
 #[doc(hidden)]
-pub struct DiscriminatedInner<Inner, Discriminator> {
+pub struct DiscriminatedInner<Inner, Inference> {
     pub(crate) inner: Inner,
-    pub(crate) discriminator: Discriminator,
+    pub(crate) inference: Inference,
 }
 
-impl<Storage, Discriminator> StateStorage for SDiscriminated<Storage, Discriminator>
+impl<Storage> StateStorage for SDiscriminated<Storage>
 where
     Storage: StateStorage,
-    Discriminator: Copy + 'static,
 {
+    type Inference = Storage::Inference;
+
     type Inner<T, S>
-        = DiscriminatedInner<Storage::Inner<T, S>, Discriminator>
+        = DiscriminatedInner<
+            Storage::Inner<T, S>,
+            <Storage::Inference as crate::InferenceKind>::Inference,
+        >
     where
         T: StateMachineImpl;
     type Machine<T>
@@ -232,7 +245,7 @@ where
     {
         DiscriminatedInner {
             inner: Storage::retag(inner.inner),
-            discriminator: inner.discriminator,
+            inference: inner.inference,
         }
     }
 
@@ -244,17 +257,22 @@ where
     where
         T: StateMachineImpl,
         From: StateTrait,
-        To: StateTrait,
+        To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple,
     {
-        let discriminator = state.inner.discriminator;
         let state = State::<Storage, T, From>::from_inner(state.inner.inner);
         let state = Storage::complete_transition(state, args, callsite);
+        let inference =
+            <<Storage::Inference as crate::InferenceKind>::Inference as crate::StateInference>::new::<
+                Storage,
+                T,
+                To,
+            >(&state.inner);
         State::from_inner(DiscriminatedInner {
             inner: state.inner,
-            discriminator,
+            inference,
         })
     }
 
@@ -265,35 +283,34 @@ where
     where
         T: StateMachineImpl,
         From: StateTrait,
-        To: StateTrait,
+        To: crate::ConcreteStateTrait,
     {
-        let discriminator = state.inner.discriminator;
         let state = State::<Storage, T, From>::from_inner(state.inner.inner);
         let state = Storage::complete_transition_after_effect(state, callsite);
+        let inference =
+            <<Storage::Inference as crate::InferenceKind>::Inference as crate::StateInference>::new::<
+                Storage,
+                T,
+                To,
+            >(&state.inner);
         State::from_inner(DiscriminatedInner {
             inner: state.inner,
-            discriminator,
+            inference,
         })
     }
 
-    fn union_discriminator<T, State, OtherDiscriminator>(
-        inner: &Self::Inner<T, State>,
-    ) -> Option<OtherDiscriminator>
+    fn inferred_state<T, State>(inner: &Self::Inner<T, State>) -> state_trait::ErasedState
     where
         T: StateMachineImpl,
-        OtherDiscriminator: Copy + 'static,
+        State: StateTrait,
     {
-        (&inner.discriminator as &dyn Any)
-            .downcast_ref::<OtherDiscriminator>()
-            .copied()
-            .or_else(|| Storage::union_discriminator(&inner.inner))
+        inner.inference.state::<Storage, T, State>(&inner.inner)
     }
 }
 
-impl<Storage, Discriminator> SRef for SDiscriminated<Storage, Discriminator>
+impl<Storage> SRef for SDiscriminated<Storage>
 where
     Storage: SRef,
-    Discriminator: Copy + 'static,
 {
     fn s_ref<T, S>(inner: &Self::Inner<T, S>) -> &T
     where
@@ -303,10 +320,9 @@ where
     }
 }
 
-impl<Storage, Discriminator> SMut for SDiscriminated<Storage, Discriminator>
+impl<Storage> SMut for SDiscriminated<Storage>
 where
     Storage: SMut,
-    Discriminator: Copy + 'static,
 {
     fn s_mut<T, S>(inner: &mut Self::Inner<T, S>) -> &mut T
     where
@@ -316,10 +332,9 @@ where
     }
 }
 
-impl<Storage, Discriminator> SMove for SDiscriminated<Storage, Discriminator>
+impl<Storage> SMove for SDiscriminated<Storage>
 where
     Storage: SMove,
-    Discriminator: Copy + 'static,
 {
 }
 
@@ -359,7 +374,7 @@ where
 
 /// Selects the union marker used to prove a transition to this target state.
 #[doc(hidden)]
-pub trait StateUnionProofTarget<T, From>: StateTrait + Sized
+pub trait StateUnionProofTarget<T, From>: crate::ConcreteStateTrait + Sized
 where
     T: StateMachineImpl,
     From: StateTrait,
@@ -372,7 +387,7 @@ where
 pub trait StateUnionSharedEffect<T, To>: StateUnionDiscriminant
 where
     T: StateMachineImpl,
-    To: StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     type Effect;
 }
@@ -382,7 +397,7 @@ where
 pub trait StateUnionSharedTransitionEffect<T, To, Args>: StateUnionSharedEffect<T, To>
 where
     T: StateMachineImpl,
-    To: StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     fn apply(value: &mut T, args: Args);
 }
@@ -400,7 +415,7 @@ where
     ) -> State<Storage, T, To>
     where
         Storage: SMut,
-        To: StateTrait;
+        To: crate::ConcreteStateTrait;
 }
 
 impl<Standin, Marker, To> Transition<StateUnionState<Marker>, To> for Standin
@@ -408,77 +423,4 @@ where
     Marker: StateUnionTransition<Standin, To>,
 {
     type F = Marker::F;
-}
-
-/// A union variant that preserves its concrete state while exposing the joint state.
-#[doc(hidden)]
-pub struct StateUnionVariant<Storage, T, Concrete, Marker, Discriminator>
-where
-    Storage: StateStorage,
-    T: StateMachineImpl,
-    Marker: StateUnionDiscriminant<Discriminator = Discriminator>,
-    Discriminator: Copy + 'static,
-{
-    state: State<SDiscriminated<Storage, Discriminator>, T, Concrete>,
-    concrete: PhantomData<fn() -> (Concrete, Marker, Discriminator)>,
-}
-
-impl<Storage, T, Concrete, Marker, Discriminator>
-    StateUnionVariant<Storage, T, Concrete, Marker, Discriminator>
-where
-    Storage: StateStorage,
-    T: StateMachineImpl,
-    Marker: StateUnionDiscriminant<Discriminator = Discriminator> + StateUnionMember<Concrete>,
-    Discriminator: Copy + 'static,
-{
-    #[must_use]
-    pub fn new(state: State<Storage, T, Concrete>, discriminator: Discriminator) -> Self {
-        Self {
-            state: State::from_inner(DiscriminatedInner {
-                inner: state.inner,
-                discriminator,
-            }),
-            concrete: PhantomData,
-        }
-    }
-
-    #[doc(hidden)]
-    #[must_use]
-    pub fn from_erased(state: DiscriminatedState<Storage, T, Marker>) -> Self {
-        Self {
-            state: State::from_inner(DiscriminatedInner {
-                inner: Storage::retag(state.inner.inner),
-                discriminator: state.inner.discriminator,
-            }),
-            concrete: PhantomData,
-        }
-    }
-
-    #[must_use]
-    pub fn into_state(self) -> State<Storage, T, Concrete> {
-        State::from_inner(self.state.inner.inner)
-    }
-
-    #[must_use]
-    pub fn into_erased(self) -> DiscriminatedState<Storage, T, Marker> {
-        State::from_inner(DiscriminatedInner {
-            inner: Storage::retag(self.state.inner.inner),
-            discriminator: self.state.inner.discriminator,
-        })
-    }
-}
-
-impl<Storage, T, Concrete, Marker, Discriminator> Deref
-    for StateUnionVariant<Storage, T, Concrete, Marker, Discriminator>
-where
-    Storage: StateStorage,
-    T: StateMachineImpl,
-    Marker: StateUnionDiscriminant<Discriminator = Discriminator>,
-    Discriminator: Copy + 'static,
-{
-    type Target = State<SDiscriminated<Storage, Discriminator>, T, Concrete>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.state
-    }
 }

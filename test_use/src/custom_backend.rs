@@ -1,8 +1,8 @@
 use crate::connection::Connection;
-use magicstatemachines::{SArc, SharedStorage, SharedValue, StateUnionState};
+use magicstatemachines::{EnumExt, SArc, SharedStorage, SharedValue};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 use test_def::{
-    Online,
+    Online, OnlineEnum,
     states::{Connected, Disconnected},
 };
 
@@ -54,20 +54,23 @@ pub(crate) fn run() {
         drop(connected);
     }
 
-    // if let Ok(guard) = shared.borrow_mut::<Online>() {
-    //     match Online.into_enum(guard) {
-    //         test_def::OnlineEnum::Connected(x) => x.into_state();
-    //         test_def::OnlineEnum::Authenticated(x) => todo!();
-    //     }
-    // }
+    if let Ok(guard) = shared.borrow_mut::<Online>() {
+        use OnlineEnum::*;
+        match Online.into_enum(guard) {
+            Connected(x) => {
+                _ = x.disconnect(); //x.authenticate("charlie".to_string());
+            }
+            Authenticated(x) => {
+                _ = x.disconnect();
+            }
+        }
+    }
 
     {
         let connected = alias.borrow::<Connected>().expect("committed state");
         println!("{} uses the custom mutex backend", connected.raw_endpoint());
     }
 
-    let online = alias
-        .borrow::<StateUnionState<Online>>()
-        .expect("committed online state");
+    let online = alias.borrow::<Online>().expect("committed online state");
     println!("{} can be borrowed through erasure", online.raw_endpoint());
 }

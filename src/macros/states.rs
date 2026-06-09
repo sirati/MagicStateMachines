@@ -9,6 +9,12 @@ macro_rules! States {
                 type Kind = $crate::ConcreteStateKind;
 
                 fn erased_state() -> &'static dyn $crate::StateTrait {
+                    <$state as $crate::ConcreteStateTrait>::erased_state()
+                }
+            }
+
+            impl $crate::ConcreteStateTrait for $state {
+                fn erased_state() -> &'static dyn $crate::StateTrait {
                     static STATE: $state = $state;
                     &STATE
                 }

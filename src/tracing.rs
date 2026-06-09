@@ -25,10 +25,10 @@ impl TraceEntry {
     pub(crate) fn new<From, To>(callsite: &'static Location<'static>) -> Self
     where
         From: StateTrait,
-        To: StateTrait,
+        To: crate::ConcreteStateTrait,
     {
         Self {
-            from: erased_state::<From>(),
+            from: crate::state_trait::static_erased_state::<From>(),
             to: erased_state::<To>(),
             callsite,
         }

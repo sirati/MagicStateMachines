@@ -101,7 +101,7 @@ where
     <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
     Args: core::marker::Tuple,
     From: crate::StateTrait,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     type Output = StateOwned<T, To>;
 
@@ -267,7 +267,7 @@ pub(super) fn complete_transition<T, From, To>(
 ) -> StateOwned<T, To>
 where
     From: crate::StateTrait,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     let mut trace = state.trace;
     trace.push(crate::TraceEntry::new::<From, To>(callsite));

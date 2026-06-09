@@ -1,7 +1,7 @@
 use super::{SharedStateError, SharedStorage, SharedValue, WrongStateError};
 use crate::{
-    SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait, StateUnionRuntime,
-    StateUnionState, Transition, TransitionCallsite,
+    InnerInference, SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait,
+    StateUnionRuntime, StateUnionState, Transition, TransitionCallsite,
     state_trait::{self, ErasedState},
 };
 use core::marker::PhantomData;
@@ -55,6 +55,8 @@ impl<'a, Backend> StateStorage for StorageStateMut<'a, Backend>
 where
     Backend: SharedStorage + 'a,
 {
+    type Inference = InnerInference;
+
     type Inner<T, S>
         = StateMut<Backend::WriteGuard<'a, T>, T, S>
     where
@@ -83,7 +85,7 @@ where
     where
         T: StateMachineImpl,
         From: StateTrait,
-        To: StateTrait,
+        To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple,
@@ -105,7 +107,7 @@ where
     where
         T: StateMachineImpl,
         From: StateTrait,
-        To: StateTrait,
+        To: crate::ConcreteStateTrait,
     {
         State {
             inner: StateMut {
@@ -115,6 +117,14 @@ where
             },
             marker: PhantomData,
         }
+    }
+
+    fn inferred_state<T, S>(inner: &Self::Inner<T, S>) -> ErasedState
+    where
+        T: StateMachineImpl,
+        S: StateTrait,
+    {
+        state_trait::clone_erased(&inner.pending)
     }
 }
 
@@ -225,7 +235,7 @@ where
     T::Standin: Transition<From, To>,
     <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
     Args: core::marker::Tuple,
-    To: StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     type Output = StateMut<G, T, To>;
 
@@ -249,7 +259,7 @@ impl<Marker> !ExactSharedBorrowState for StateUnionState<Marker> {}
 
 impl<S> SharedBorrowState for S
 where
-    S: StateTrait + ExactSharedBorrowState,
+    S: crate::ConcreteStateTrait + ExactSharedBorrowState,
 {
     fn ensure_state(actual: &ErasedState) -> Result<(), WrongStateError> {
         if state_trait::is_state::<S>(actual) {

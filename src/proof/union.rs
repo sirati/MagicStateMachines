@@ -1,6 +1,6 @@
 use crate::{
-    ConcreteStateKind, State, StateMachineImpl, StateMarker, StateStorage, StateTrait,
-    StateUnionDiscriminant, StateUnionErased, StateUnionSharedEffect, StateUnionTransition,
+    State, StateMachineImpl, StateMarker, StateStorage, StateTrait, StateUnionDiscriminant,
+    StateUnionErased, StateUnionSharedEffect, StateUnionTransition,
 };
 use core::marker::PhantomData;
 
@@ -57,7 +57,7 @@ pub trait UnionTransitionProof<T, TUnion, TTo>: StateMarker
 where
     T: StateMachineImpl,
     TUnion: StateUnionDiscriminant,
-    TTo: StateMarker<Kind = ConcreteStateKind>,
+    TTo: crate::ConcreteStateTrait,
 {
 }
 
@@ -68,6 +68,6 @@ where
     TUnion: StateUnionDiscriminant
         + StateUnionTransition<T::Standin, TTo>
         + StateUnionSharedEffect<T, TTo>,
-    TTo: StateMarker<Kind = ConcreteStateKind> + StateTrait,
+    TTo: crate::ConcreteStateTrait,
 {
 }

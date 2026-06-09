@@ -6,6 +6,7 @@ use crate::{
     StateUnionDiscriminatedTransition, StateUnionErased, StateUnionProofTarget,
     StateUnionProvenState, StateUnionSharedEffect, StateUnionSharedTransitionEffect,
     StateUnionTransitionProof, StateWithProof, Transition, UnionStateKind,
+    state_trait,
 };
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -50,8 +51,104 @@ where
     fn apply(value: &mut T, args: Args);
 }
 
+/// Selects where a storage backend's authoritative state marker is inferred.
+#[doc(hidden)]
+pub trait InferenceKind {
+    type Inference: StateInference;
+}
+
+/// State marker inference carried by discriminated storage.
+#[doc(hidden)]
+pub trait StateInference {
+    fn new<Storage, T, S>(inner: &Storage::Inner<T, S>) -> Self
+    where
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        S: crate::ConcreteStateTrait;
+
+    fn from_erased(state: state_trait::ErasedState) -> Self;
+
+    fn state<Storage, T, S>(&self, inner: &Storage::Inner<T, S>) -> state_trait::ErasedState
+    where
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        S: crate::StateTrait;
+}
+
+/// Inference stored outside the wrapped backend, used by type-only storage.
+#[doc(hidden)]
+pub struct OuterInference;
+
+/// Inference delegated to the wrapped backend, used by runtime-state storage.
+#[doc(hidden)]
+pub struct InnerInference;
+
+/// ZST inference value for [`InnerInference`].
+#[doc(hidden)]
+#[derive(Clone, Copy)]
+pub struct InnerStateInference;
+
+impl InferenceKind for OuterInference {
+    type Inference = state_trait::ErasedState;
+}
+
+impl InferenceKind for InnerInference {
+    type Inference = InnerStateInference;
+}
+
+impl StateInference for state_trait::ErasedState {
+    fn new<Storage, T, S>(_inner: &Storage::Inner<T, S>) -> Self
+    where
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        S: crate::ConcreteStateTrait,
+    {
+        state_trait::erased_state::<S>()
+    }
+
+    fn from_erased(state: state_trait::ErasedState) -> Self {
+        state
+    }
+
+    fn state<Storage, T, S>(&self, _inner: &Storage::Inner<T, S>) -> state_trait::ErasedState
+    where
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        S: crate::StateTrait,
+    {
+        state_trait::clone_erased(self)
+    }
+}
+
+impl StateInference for InnerStateInference {
+    fn new<Storage, T, S>(_inner: &Storage::Inner<T, S>) -> Self
+    where
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        S: crate::ConcreteStateTrait,
+    {
+        Self
+    }
+
+    fn from_erased(_state: state_trait::ErasedState) -> Self {
+        Self
+    }
+
+    fn state<Storage, T, S>(&self, inner: &Storage::Inner<T, S>) -> state_trait::ErasedState
+    where
+        Storage: StateStorage,
+        T: StateMachineImpl,
+        S: crate::StateTrait,
+    {
+        Storage::inferred_state(inner)
+    }
+}
+
 /// Storage backend used by [`State`].
 pub trait StateStorage: Sized {
+    /// Selects how [`SDiscriminated`](crate::SDiscriminated) recovers the current state marker.
+    type Inference: InferenceKind = OuterInference;
+
     /// Concrete state representation used by this storage backend.
     type Inner<T, S>
     where
@@ -75,7 +172,7 @@ pub trait StateStorage: Sized {
     where
         T: StateMachineImpl,
         From: crate::StateTrait,
-        To: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
         Args: core::marker::Tuple;
@@ -88,18 +185,16 @@ pub trait StateStorage: Sized {
     where
         T: StateMachineImpl,
         From: crate::StateTrait,
-        To: crate::StateTrait;
+        To: crate::ConcreteStateTrait;
 
     #[doc(hidden)]
-    fn union_discriminator<T, State, Discriminator>(
-        inner: &Self::Inner<T, State>,
-    ) -> Option<Discriminator>
+    fn inferred_state<T, State>(inner: &Self::Inner<T, State>) -> state_trait::ErasedState
     where
         T: StateMachineImpl,
-        Discriminator: Copy + 'static,
+        State: crate::StateTrait,
     {
         let _ = inner;
-        None
+        state_trait::static_erased_state::<State>()
     }
 }
 
@@ -112,7 +207,7 @@ where
     Storage: StateStorage,
     T: StateMachineImpl,
     From: crate::StateTrait,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     Storage::complete_transition_after_effect(state, callsite)
 }
@@ -204,7 +299,7 @@ where
     Storage: StateStorage,
     From: crate::StateTrait,
     Marker: crate::StateMarker,
-    To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+    To: crate::ConcreteStateTrait,
     Kind: StateKind,
 {
     state: State<Storage, T, From>,
@@ -220,7 +315,7 @@ where
     Storage: StateStorage,
     From: crate::StateTrait,
     Marker: StateUnionDiscriminant,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     state: State<Storage, T, From>,
     callsite: TransitionCallsite,
@@ -265,7 +360,7 @@ where
     <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
     Args: core::marker::Tuple,
     From: crate::StateTrait,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     type Output = State<Storage, T, To>;
 
@@ -290,7 +385,7 @@ where
     <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
     Args: core::marker::Tuple,
     From: crate::StateTrait,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
     Effect: TransitionEffect<T, From, To, Args>,
 {
     type Output = State<Storage, T, To>;
@@ -310,7 +405,7 @@ where
     <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
     Args: core::marker::Tuple,
     From: crate::StateTrait,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
     <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
 {
     type Output = State<Storage, T, To>;
@@ -332,9 +427,9 @@ where
     T::Standin: Transition<From, To>,
     <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
     Args: core::marker::Tuple,
-    From: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+    From: crate::ConcreteStateTrait,
     Marker: crate::StateMarker,
-    To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+    To: crate::ConcreteStateTrait,
     <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
 {
     type Output = State<Storage, T, To>;
@@ -353,10 +448,10 @@ impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
 where
     T: StateMachineImpl,
     Storage: SMut,
-    From: crate::StateTrait + crate::StateMarker + crate::In<Marker>,
+    From: crate::StateTrait + crate::In<Marker>,
     Marker: StateUnionDiscriminant + StateUnionDiscriminatedTransition<T, To, Args>,
     Args: core::marker::Tuple,
-    To: crate::StateTrait + crate::StateMarker<Kind = ConcreteStateKind>,
+    To: crate::ConcreteStateTrait,
 {
     type Output = State<Storage, T, To>;
 
@@ -374,7 +469,7 @@ where
     From: StateUnionErased<Marker>,
     Marker: StateUnionSharedTransitionEffect<T, To, Args>,
     Args: core::marker::Tuple,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     type Output = State<Storage, T, To>;
 
@@ -391,7 +486,7 @@ where
     Storage: SMut,
     Marker: StateUnionDiscriminatedTransition<T, To, Args>,
     Args: core::marker::Tuple,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     type Output = State<Storage, T, To>;
 
@@ -412,7 +507,7 @@ where
     Storage: StateStorage,
     T::Standin: Transition<S, Next>,
     S: crate::StateTrait,
-    Next: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
 {
     StateTransitionCall {
         state,
@@ -435,7 +530,7 @@ where
     Storage: StateStorage,
     T::Standin: Transition<S, Next>,
     S: crate::StateTrait,
-    Next: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
 {
     EffectTransitionCall {
         state,
@@ -457,7 +552,7 @@ where
     Storage: StateStorage,
     S: StateUnionErased<Marker>,
     Marker: StateUnionSharedEffect<T, Next>,
-    Next: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
 {
     StateUnionProofTransitionCall {
         state: proven.state,
@@ -486,7 +581,7 @@ where
     T::Standin: Transition<S, Next>,
     Marker: StateUnionDiscriminant,
     S: crate::StateTrait,
-    Next: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
 {
     transition_state_with_effect(proven.state, token)
 }
@@ -511,7 +606,7 @@ where
     T::Standin: Transition<S, Next>,
     Marker: StateUnionDiscriminant,
     S: crate::StateTrait,
-    Next: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
 {
     let StateWithProof {
         state,
@@ -533,7 +628,7 @@ where
     Storage: StateStorage,
     S: StateUnionErased<Marker>,
     Marker: StateUnionSharedEffect<T, Next>,
-    Next: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
 {
     let StateWithProof {
         state,
@@ -559,7 +654,7 @@ where
     Storage: StateStorage,
     S: crate::StateTrait,
     Marker: StateUnionDiscriminant,
-    Next: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
 {
     let StateWithProof {
         state,
@@ -585,7 +680,7 @@ where
     Storage: StateStorage,
     S: crate::StateTrait,
     Marker: crate::StateMarker,
-    Next: crate::StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
+    Next: crate::ConcreteStateTrait,
     Kind: StateKind,
 {
     let StateWithProof {
@@ -612,7 +707,7 @@ where
     Storage: StateStorage,
     S: crate::StateTrait,
     Marker: crate::StateMarker,
-    Next: crate::StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
+    Next: crate::ConcreteStateTrait,
     Kind: StateKind,
 {
     let StateWithProof {
@@ -636,7 +731,7 @@ where
     T: StateMachineImpl,
     Storage: SMut,
     From: crate::StateTrait,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
     Effect: TransitionEffect<T, From, To, Args>,
 {
     Effect::apply(Storage::s_mut(&mut state.inner), args);
@@ -693,7 +788,7 @@ where
     Storage: StateStorage,
     S: StateUnionErased<Marker>,
     Marker: StateUnionSharedEffect<T, To>,
-    To: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
 {
     StateUnionProvenState {
         state,
@@ -723,7 +818,7 @@ where
     where
         S: crate::StateTrait,
         Marker: crate::StateMarker,
-        To: crate::StateTrait + crate::StateMarker<Kind = crate::ConcreteStateKind>,
+        To: crate::ConcreteStateTrait,
         Kind: crate::StateKind,
     {
         StateWithProof { state: self, proof }

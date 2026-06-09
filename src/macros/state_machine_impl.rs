@@ -45,7 +45,7 @@ macro_rules! StateMachineImpl {
             for $implementation
         where
             Marker: $crate::StateUnionSharedEffect<$implementation, To>,
-            To: $crate::StateTrait,
+            To: $crate::ConcreteStateTrait,
         {
             type Effect = __StateMachineUnionTransitionEffect<Marker, To>;
         }
@@ -58,7 +58,7 @@ macro_rules! StateMachineImpl {
         > for __StateMachineUnionTransitionEffect<Marker, To>
         where
             Marker: $crate::StateUnionSharedTransitionEffect<$implementation, To, Args>,
-            To: $crate::StateTrait,
+            To: $crate::ConcreteStateTrait,
         {
             fn apply(value: &mut $implementation, args: Args) {
                 <Marker as $crate::StateUnionSharedTransitionEffect<
@@ -87,7 +87,7 @@ macro_rules! StateMachineImpl {
             >
             where
                 From: $crate::StateTrait,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
                 From: $crate::StateUnionConcreteState,
                 $standin: $crate::Transition<From, To>,
                 $implementation: $crate::TransitionEffectSelector<From, To>;
@@ -116,7 +116,7 @@ macro_rules! StateMachineImpl {
             >
             where
                 From: $crate::StateTrait,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
                 From: $crate::StateUnionConcreteState,
                 $standin: $crate::Transition<From, To>,
                 $implementation: $crate::TransitionEffectSelector<From, To>,
@@ -147,7 +147,7 @@ macro_rules! StateMachineImpl {
             where
                 From: $crate::StateTrait + $crate::In<Marker>,
                 Marker: $crate::StateMarker,
-                To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>;
+                To: $crate::ConcreteStateTrait;
         }
 
         impl<Storage, From> __GenericStateMarkerTransitionExt<Storage, From>
@@ -176,7 +176,7 @@ macro_rules! StateMachineImpl {
             where
                 From: $crate::StateTrait + $crate::In<Marker>,
                 Marker: $crate::StateMarker,
-                To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+                To: $crate::ConcreteStateTrait,
             {
                 $crate::transition_state_with_kind_proof::<
                     Storage,
@@ -199,7 +199,7 @@ macro_rules! StateMachineImpl {
             Storage: $crate::StateStorage,
             From: $crate::StateTrait,
             Marker: $crate::StateMarker,
-            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            To: $crate::ConcreteStateTrait,
             Kind: $crate::StateKind,
         {
             #[track_caller]
@@ -239,7 +239,7 @@ macro_rules! StateMachineImpl {
                 >,
             From: $crate::StateTrait,
             Marker: $crate::StateMarker,
-            To: $crate::StateTrait + $crate::StateMarker<Kind = $crate::ConcreteStateKind>,
+            To: $crate::ConcreteStateTrait,
             Kind: $crate::StateKind,
         {
             #[track_caller]
@@ -290,7 +290,7 @@ macro_rules! StateMachineImpl {
                 >,
                 From: $crate::StateTrait + $crate::StateUnionConcreteState,
                 Marker: $crate::StateUnionDiscriminant,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
                 $standin: $crate::Transition<From, To>,
                 $implementation: $crate::TransitionEffectSelector<From, To>;
         }
@@ -313,7 +313,7 @@ macro_rules! StateMachineImpl {
                 >,
             From: $crate::StateTrait,
             Marker: $crate::StateUnionDiscriminant,
-            To: $crate::StateTrait,
+            To: $crate::ConcreteStateTrait,
         {
             #[track_caller]
             fn transition(
@@ -327,7 +327,7 @@ macro_rules! StateMachineImpl {
             >
             where
                 From: $crate::StateTrait + $crate::StateUnionConcreteState,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
                 $standin: $crate::Transition<From, To>,
                 $implementation: $crate::TransitionEffectSelector<From, To>,
                 Marker: $crate::StateUnionDiscriminant,
@@ -367,7 +367,7 @@ macro_rules! StateMachineImpl {
                 >,
                 From: $crate::StateUnionErased<Marker>,
                 Marker: $crate::StateUnionSharedEffect<$implementation, To>,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
             {
                 $crate::transition_state_with_union_proof(
                     self,
@@ -393,7 +393,7 @@ macro_rules! StateMachineImpl {
                 To,
             >
             where
-                To: $crate::StateTrait;
+                To: $crate::ConcreteStateTrait;
         }
 
         impl<Storage, Marker> __GenericStateUnionTransitionExt<Storage, Marker>
@@ -417,7 +417,7 @@ macro_rules! StateMachineImpl {
                 To,
             >
             where
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
             {
                 $crate::transition_discriminated_state(self, __StateMachineTransitionToken(()))
             }
@@ -472,7 +472,7 @@ macro_rules! StateMachineImpl {
             fn transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
             where
                 From: $crate::StateTrait,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
                 T::Standin: $crate::Transition<From, To>;
         }
 
@@ -491,7 +491,7 @@ macro_rules! StateMachineImpl {
             fn transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
             where
                 From: $crate::StateTrait,
-                To: $crate::StateTrait,
+                To: $crate::ConcreteStateTrait,
                 T::Standin: $crate::Transition<From, To>,
             {
                 $crate::transition_state(self, __StateMachineTransitionToken(()))

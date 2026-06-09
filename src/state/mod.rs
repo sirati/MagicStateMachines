@@ -4,8 +4,9 @@ mod storage;
 pub use owned::{SPin, StateOwned, TransitionCall, transition};
 pub use storage::{
     ConcreteProofTransitionCall, DiscriminatedTransitionCall, EffectTransitionCall,
-    KindProofTransitionCall, SBox, SMove, SMut, SOwned, SPinBox, SRef, SResult, State,
-    StateStorage, StateStorageNew, StateTransitionCall,
+    InferenceKind, InnerInference, InnerStateInference, KindProofTransitionCall, OuterInference,
+    SBox, SMove, SMut, SOwned, SPinBox, SRef, SResult, State, StateInference, StateStorage,
+    StateStorageNew, StateTransitionCall,
     StateUnionProofTransitionCall, StorageStateOwned, StorageStateOwnedBox,
     StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc,
     TransitionCallsite, TransitionEffect, TransitionEffectSelector,

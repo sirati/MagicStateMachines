@@ -31,7 +31,10 @@ mod util;
 pub use contract::{Initial, StateMachineImpl, Transition};
 #[cfg(feature = "decompose")]
 pub use decomposed::{DecomposedData, DecomposedState, RecomposeError};
-pub use kind::{ConcreteStateKind, StateKind, StateMarker, UnionStateKind};
+pub use kind::{
+    ConcreteStateKind, RuntimeStateMarker, StateKind, StateMarker, StateRuntimeMarkerFor,
+    UnionStateKind,
+};
 pub use policy::{StateClone, StateCopy};
 pub use proof::{
     StateConcreteProvenState, StateConcreteTransitionProof, StateProofTransition,
@@ -46,8 +49,9 @@ pub use shared::{
 };
 pub use state::{
     ConcreteProofTransitionCall, DiscriminatedTransitionCall, EffectTransitionCall,
-    KindProofTransitionCall, SBox, SMove, SMut, SOwned, SPin, SPinBox, SRef, SResult, State,
-    StateOwned, StateStorage, StateStorageNew, StateTransitionCall, StateUnionProofTransitionCall,
+    InferenceKind, InnerInference, InnerStateInference, KindProofTransitionCall, OuterInference,
+    SBox, SMove, SMut, SOwned, SPin, SPinBox, SRef, SResult, State, StateInference, StateOwned,
+    StateStorage, StateStorageNew, StateTransitionCall, StateUnionProofTransitionCall,
     StorageStateOwned, StorageStateOwnedBox,
     StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc,
     TransitionCall, TransitionCallsite, TransitionEffect, TransitionEffectSelector,
@@ -59,7 +63,11 @@ pub use state::{
     transition_state_with_kind_proof, transition_state_with_union_proof,
     transition_state_with_union_transition_proof,
 };
+#[doc(hidden)]
+pub use state_trait::ConcreteStateTrait;
 pub use state_trait::StateTrait;
+#[doc(hidden)]
+pub use state_trait::{ErasedState, clone_erased as clone_erased_state};
 #[cfg(feature = "tracing")]
 pub use tracing::TraceEntry;
 #[doc(hidden)]
@@ -73,9 +81,8 @@ pub use union::{
     DiscriminatedInner, SDiscriminated, StateUnionErased, StateUnionMember,
     StateUnionProofMembership, StateUnionProofTarget, StateUnionRuntime, StateUnionSharedEffect,
     StateUnionSharedTransitionEffect, StateUnionState, StateUnionTransition,
-    StateUnionVariant, concretize_discriminated_state, discriminate_state,
-    discriminated_state_discriminator, rediscriminate_union_state, state_union_discriminator,
-    undiscriminate_state,
+    concretize_discriminated_state, discriminate_state, discriminated_state_marker,
+    erased_state_type_id, rediscriminate_union_state, state_union_marker, undiscriminate_state,
 };
 pub use util::EnumExt;
 #[doc(hidden)]

@@ -2,7 +2,10 @@ mod guard;
 mod storage;
 mod weak;
 
-use crate::{Initial, SOwned, State, StateMachineImpl, state_trait};
+use crate::{
+    Initial, RuntimeStateMarker, SOwned, State, StateMachineImpl, StateMarker,
+    StateRuntimeMarkerFor, StateTrait, state_trait,
+};
 use core::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -19,6 +22,36 @@ pub use weak::{
 };
 
 /// Shared state using an explicit, replaceable storage backend.
+///
+/// Union markers can be borrowed, but cannot be stored as the committed runtime state:
+///
+/// ```compile_fail
+/// use magicstatemachines::{SArcMutex, StateMachineDefinition, StateMachineImpl, States};
+///
+/// struct Machine;
+/// struct Standin;
+///
+/// States! {
+///     A;
+///     B;
+/// }
+///
+/// StateMachineDefinition! {
+///     for Standin;
+///
+///     Initial: A;
+///     transition A => B();
+///     union Any: A | B;
+/// }
+///
+/// StateMachineImpl! {
+///     Machine: Standin;
+///
+///     transition A => B();
+/// }
+///
+/// let _state = SArcMutex::<Machine>::new::<Any>(Machine);
+/// ```
 pub struct SharedState<P, S, T>
 where
     S: SharedStorage,
@@ -48,7 +81,7 @@ where
     pub fn new<State>(value: T) -> Self
     where
         T::Standin: Initial<State>,
-        State: crate::StateTrait,
+        State: crate::ConcreteStateTrait,
     {
         Self {
             storage: P::from(Backend::new(SharedValue {
@@ -63,7 +96,7 @@ where
     #[must_use]
     pub fn from_state<StateMarker>(state: State<SOwned, T, StateMarker>) -> Self
     where
-        StateMarker: crate::StateTrait,
+        StateMarker: crate::ConcreteStateTrait,
     {
         Self {
             storage: P::from(Backend::new(SharedValue {
@@ -75,24 +108,33 @@ where
         }
     }
 
-    pub fn borrow<State>(
+    pub fn borrow<RequestedState>(
         &self,
     ) -> Result<
-        StateRef<Backend::ReadGuard<'_, T>, T, State>,
+        StateRef<Backend::ReadGuard<'_, T>, T, RuntimeStateMarker<RequestedState>>,
         SharedStateError<Backend::ReadError<'_, T>>,
     >
     where
-        State: SharedBorrowState,
+        RequestedState: StateTrait
+            + StateMarker
+            + StateRuntimeMarkerFor<<RequestedState as StateMarker>::Kind>,
+        RuntimeStateMarker<RequestedState>: SharedBorrowState,
     {
         let guard = Backend::read(self.storage.as_ref()).map_err(SharedStateError::Storage)?;
         StateRef::from_guard(guard)
     }
 
-    pub fn borrow_mut<StateMarker>(
+    pub fn borrow_mut<RequestedState>(
         &self,
-    ) -> Result<SMutView<'_, Backend, T, StateMarker>, SharedStateError<Backend::WriteError<'_, T>>>
+    ) -> Result<
+        SMutView<'_, Backend, T, RuntimeStateMarker<RequestedState>>,
+        SharedStateError<Backend::WriteError<'_, T>>,
+    >
     where
-        StateMarker: SharedBorrowState,
+        RequestedState: StateTrait
+            + StateMarker
+            + StateRuntimeMarkerFor<<RequestedState as StateMarker>::Kind>,
+        RuntimeStateMarker<RequestedState>: SharedBorrowState,
     {
         let guard = Backend::write(self.storage.as_ref()).map_err(SharedStateError::Storage)?;
         StateMut::from_guard(guard).map(State::from_inner)
