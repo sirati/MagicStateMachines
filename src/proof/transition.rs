@@ -81,8 +81,7 @@ where
     }
 }
 
-impl<Storage, T, From, Marker, To, Inner>
-    StateProofTransition<Storage, T, From, Marker, To>
+impl<Storage, T, From, Marker, To, Inner> StateProofTransition<Storage, T, From, Marker, To>
     for TransitionProof<Storage, T, From, Marker, To, Inner>
 where
     T: StateMachineImpl,

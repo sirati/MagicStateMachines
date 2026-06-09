@@ -87,8 +87,8 @@ impl Connection {
         S: SMut,
     {
         match user {
-            Some(user) => <_>::into_enum(self.authenticate(user)),
-            None => <_>::into_enum(self),
+            Some(user) => <_>::into_discriminated(self.authenticate(user)),
+            None => <_>::into_discriminated(self),
         }
     }
 
@@ -99,7 +99,7 @@ impl Connection {
     where
         S: SRef,
     {
-        <_>::into_enum(self)
+        <_>::into_discriminated(self)
     }
 
     #[must_use]
@@ -109,7 +109,7 @@ impl Connection {
     where
         S: SMut,
     {
-        match <_>::into_enum(self).discriminate() {
+        match <_>::into_discriminated(self).discriminate() {
             test_def::OnlineEnum::Connected(x) => transition!(x),
             test_def::OnlineEnum::Authenticated(x) => transition!(x),
         }

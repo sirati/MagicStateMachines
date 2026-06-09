@@ -49,8 +49,10 @@ pub(crate) trait Connectable:
         S: SMut,
     {
         match user {
-            Some(user) => <Authenticated as In<Online>>::into_enum(self.authenticate(user)),
-            None => <Connected as In<Online>>::into_enum(self),
+            Some(user) => {
+                <Authenticated as In<Online>>::into_discriminated(self.authenticate(user))
+            }
+            None => <Connected as In<Online>>::into_discriminated(self),
         }
     }
 
@@ -61,7 +63,7 @@ pub(crate) trait Connectable:
     where
         S: SRef,
     {
-        <_>::into_enum(self)
+        <_>::into_discriminated(self)
     }
 
     fn endpoint(self: &State<impl SRef, Self, impl In<Online>>) -> &str;

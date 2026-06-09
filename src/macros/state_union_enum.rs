@@ -44,16 +44,49 @@ macro_rules! __StateUnionEnum {
         @enum $enum_name:ident $marker:ident:
         $first:ident $(| $state:ident)*
     ) => {
+        #[doc = concat!(
+            "Value-carrying enum for the `",
+            stringify!($marker),
+            "` state union.\n\n",
+            "Each variant contains the same runtime value and storage backend, ",
+            "but with a concrete state marker. Matching this enum recovers the ",
+            "specific concrete state, so state-specific methods and concrete ",
+            "transitions become available again.\n\n",
+            "Most APIs should name `DiscriminatedState<Storage, T, ",
+            stringify!($marker),
+            ">` in signatures. Call `discriminate()` when you need this enum ",
+            "for branching. After matching, call `into_erased()` on the enum when ",
+            "the caller should receive the broader union-typed state again.\n\n",
+            "The enum itself is useful when the state machine can return more than ",
+            "one possible concrete state and the caller must decide what to do with ",
+            "each case. A variant such as `",
+            stringify!($enum_name),
+            "::",
+            stringify!($first),
+            "` contains `State<Storage, T, ",
+            stringify!($first),
+            ">`, not an erased state."
+        )]
         #[allow(dead_code)]
         pub enum $enum_name<Storage, T>
         where
             Storage: $crate::StateStorage,
             T: $crate::StateMachineImpl,
         {
+            #[doc = concat!(
+                "The union value is currently in state `",
+                stringify!($first),
+                "`."
+            )]
             $first(
                 $crate::State<Storage, T, $first>
             ),
             $(
+                #[doc = concat!(
+                    "The union value is currently in state `",
+                    stringify!($state),
+                    "`."
+                )]
                 $state(
                     $crate::State<Storage, T, $state>
                 ),
@@ -112,6 +145,20 @@ macro_rules! __StateUnionEnum {
             T: $crate::StateMachineImpl,
         {
             #[must_use]
+            #[doc = concat!(
+                "Converts this concrete enum variant back into a discriminated `",
+                stringify!($marker),
+                "` state.\n\n",
+                "Use this after matching when the return type should be the broader ",
+                "union state again instead of one concrete variant. The resulting ",
+                "`DiscriminatedState<Storage, T, ",
+                stringify!($marker),
+                ">` still remembers the concrete variant for later dynamic ",
+                "transition or `discriminate()` calls.\n\n",
+                "This does not run a transition effect and does not change the runtime ",
+                "value. It only changes the type-level view from a concrete enum variant ",
+                "back to the named union."
+            )]
             pub fn into_erased(
                 self,
             ) -> $crate::__private::paste! {

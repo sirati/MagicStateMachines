@@ -1,8 +1,8 @@
 use crate::{
-    State, StateConcreteProvenState, StateConcreteTransitionProof,
-    StateMachineImpl, StateStorage, StateTrait, StateUnionDiscriminant,
-    StateUnionErased, StateUnionProvenState, StateUnionSharedEffect, StateUnionTransitionProof,
-    Transition, TransitionEffectSelector, UnionTransitionProof,
+    State, StateConcreteProvenState, StateConcreteTransitionProof, StateMachineImpl, StateStorage,
+    StateTrait, StateUnionDiscriminant, StateUnionErased, StateUnionProvenState,
+    StateUnionSharedEffect, StateUnionTransitionProof, Transition, TransitionEffectSelector,
+    UnionTransitionProof,
 };
 use core::marker::PhantomData;
 

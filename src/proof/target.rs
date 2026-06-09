@@ -1,6 +1,4 @@
-use crate::{
-    StateKind, StateMachineImpl, StateMarker, StateStorage, StateTrait,
-};
+use crate::{StateKind, StateMachineImpl, StateMarker, StateStorage, StateTrait};
 use core::marker::PhantomData;
 
 #[doc(hidden)]

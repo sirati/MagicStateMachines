@@ -1,236 +1,229 @@
 # MagicStateMachines
 
-MagicStateMachines provides a transparent typestate wrapper for
-compiler-enforced state machines. The state-machine contract and its runtime
-implementation live in separate crates.
+MagicStateMachines provides typestate wrappers for compiler-enforced state
+machines whose contract can live in a separate crate from the runtime
+implementation.
 
-The workspace contains:
+The library is nightly-only because it uses `arbitrary_self_types`.
 
-- `MagicStateMachines` / `magicstatemachines`: the reusable `State<Storage, T, S>` wrapper
-- `test_def`: only the stand-in ZST, states, allowed transitions, and unions
-- `test_use`: the runtime type and all method implementations
+This library in the default configuration does not use `unsafe`. If you want to use thin-pointers for dynamic dispatch of union state transitions, the feature dynZST can be used which relies on unsafe, but is very small can be easily audited.
 
-The Nix flake provides the latest nightly Rust toolchain from `rust-overlay`,
-including Cargo, Clippy, rustfmt, rust-src, rust-analyzer, and cargo-nextest.
-No rustup toolchain is used.
+All abstractions in this library are zero-cost. The state machines exist only at compile-time and are shown to be well optimizeable by the compiler. Only when using state-machines across boundaries that the compiler can no longer prove: e.g. behind a smart-pointer like Arc or Rc the state incurs storage cost and requires dynamic dispatch. However the dynamic dispatch only happens at boundary at which the state-space gets restricted. Without any restrictions or after a state is proven concrete, all nominally dynamic dispatches are via the compile-time type system back to static dispatch. With other words, calling a dynamically dispatched transition with a concrete state will always be a zero-cost static dispatch, that the compiler can simplify or choose to inline.
 
-Enter the development environment before running project commands:
+The main achievement of this crate is, that it allows using state-machines nearly without any boiler plate, and no penalty to coding ergonomics. A type that that so far did not have a state-machine can be retrofit without changing the overall implementation if it already adhered to the implied state-machine. Async, generics, &mut (SMut), & (&SRef), pin<&mut> (SPinMut), moving (SMove), smart-pointer, and runtime borrow-checking primitives, even traits are all supported. (default fn on traits are NOT supported)
 
-```console
-nix develop
-cargo test --workspace
-cargo run -p test_use
-```
+As type-system enforced state-machines change the type, every function that transitions state must always return self. This requires that &mut like borrowing to be facilitated behind a guard which must specialise on the backing storage e.g. Mutex, RwLock or RefCell. For rust std types implementations are provided, for third party they can be implemented without restrictions even for foreign types, as wrappers are mostly defined by a ZST which gets around the foreign type restriction similarily to newtypes.
 
-The definition crate fixes the transition graph:
+I generally recomment that state-machines are defined in their own crate, for sake of separation of concerns as well as speeding up compile time (which is fast either way). State machine definitions function analogous to traits, in that they define a contract that implementing types must fulfil. They are however private contracts as they do not provide an interface that could be used by consumers of implementation. Consumers very much can benefit from the compile-time enforcement tho.
 
-```rust
-impl Transition<Disconnected, Connected> for ConnectionStandin {}
-```
+In general, this crate can be relied upon for safety proofs. Be aware however as rust does not have linear types, any guard can always be mem::forget()ten.
 
-Transitions can declare required arguments with an associated function type:
+## Contract Crate
+
+Define the stand-in type, state markers, initial states, allowed transitions,
+and state unions:
 
 ```rust
-impl Transition<Connected, Authenticated> for ConnectionStandin {
-    type F = fn(String);
+use magicstatemachines::{StateMachineDefinition, States};
+
+pub struct ConnectionStandin;
+
+pub mod states {
+    use magicstatemachines::States;
+
+    States! {
+        Disconnected;
+        Connected;
+        Authenticated;
+    }
 }
 
-let authenticated =
-    connected.authenticate("alice");
-```
+use states::{Authenticated, Connected, Disconnected};
 
-The associated type defaults to `fn()`. The implementation macro generates the
-private transition capability and module-local `transition()` helpers:
+StateMachineDefinition! {
+    for ConnectionStandin;
 
-```rust
-magicstatemachines::StateMachineImpl!(Connection: ConnectionStandin);
-```
+    Initial: Disconnected;
 
-Those helpers return a one-shot callable whose `FnOnce` implementation uses the
-`rust-call` ABI. The underlying public `magicstatemachines::transition` and
-`transition_mut` functions require the generated token, whose constructor
-remains private to the implementation module. Safe caller code therefore
-cannot bypass the implementation's transition methods.
+    transition Disconnected => Connected();
+    transition Connected => Authenticated(user: String);
+    transition Connected => Disconnected();
+    transition Authenticated => Connected | Disconnected();
 
-Because `Transition`, `ConnectionStandin`, and the states are owned by other
-crates, the implementation crate cannot add another transition.
-The definition separately declares the permitted initial state:
-
-```rust
-impl Initial<Disconnected> for ConnectionStandin {}
-```
-
-A state can be split while preserving its type-level identity:
-
-```rust
-let (state, data) = connection.decompose();
-let connection = StateOwned::recompose(state, data)?;
-```
-
-This API is behind the `decompose` feature. Both opaque values carry the same
-random `u64`, and recomposition rejects tokens from different decompositions.
-With both `decompose` and `nightly-random`, the UID uses nightly `std::random`
-and the `rnd` crate is not required. With `decompose-rnd`, the UID is generated
-through the `rnd` crate. Plain `decompose` without either random backend is a
-compile-time error because Cargo features cannot express "enable `rnd` unless
-`nightly-random` is enabled". When `decompose` is disabled, neither
-decomposition API nor UID generation is compiled.
-
-The project uses nightly Rust because arbitrary self types are unstable:
-
-```rust
-pub fn connect(
-    self: State<SOwned, Self, states::Disconnected>,
-) -> State<SOwned, Self, states::Connected> {
-    self.transition()()
+    union Online: Connected | Authenticated;
 }
 ```
 
-Operations shared by several states use a generated public union marker,
-a sealed membership trait named `In{UnionName}`, and a default value-carrying
-enum named `{UnionName}Enum`:
+The contract crate owns the stand-in and states, so downstream crates cannot
+add extra transitions.
+
+## Implementation Crate
+
+Connect a runtime type to the contract and implement methods with state-typed
+receivers:
 
 ```rust
-StateUnion!(Online: Connected | Authenticated);
+use magicstatemachines::{SMut, State, StateMachineImpl, transition};
+use contract::{
+    ConnectionStandin, InOnline, Online,
+    states::{Authenticated, Connected, Disconnected},
+};
+
+pub struct Connection {
+    user: Option<String>,
+}
+
+StateMachineImpl! {
+    Connection: ConnectionStandin;
+
+    transition Disconnected => Connected();
+
+    transition Connected => Authenticated(user: String) {
+        self.user = Some(user);
+    }
+
+    transition Connected | Authenticated => Disconnected() {
+        self.user = None;
+    }
+}
+
+impl Connection {
+    pub fn connect<S>(self: State<S, Self, Disconnected>) -> State<S, Self, Connected>
+    where
+        S: SMut,
+    {
+        transition!(self)
+    }
+
+    pub fn authenticate<S>(
+        self: State<S, Self, Connected>,
+        user: impl Into<String>,
+    ) -> State<S, Self, Authenticated>
+    where
+        S: SMut,
+    {
+        transition!(self, user.into())
+    }
+
+    pub fn disconnect<S>(self: State<S, Self, impl InOnline>) -> State<S, Self, Disconnected>
+    where
+        S: SMut,
+    {
+        transition!(const Online self)
+    }
+}
 ```
 
-The enum name can also be chosen explicitly, or an enum can be generated by
-itself:
+`transition!` is only usable in the module where `StateMachineImpl!` generated
+the private transition token. Public callers can only transition through the
+methods the implementation exposes.
+
+You might have noticed the `InOnline` trait, that is not explicitly defined in this example. It is generated by the `StateMachineDefinition!` macro when the union was defined `union Online: Connected | Authenticated;`
+
+## State Storage
+
+`State<Storage, T, S>` separates the runtime type `T`, current state marker
+`S`, and storage backend `Storage`.
+
+Common storage aliases include:
+
+- `SOwned`: directly owned runtime value
+- `SBox<T, S>`: boxed owned runtime value
+- `SPinBox<T, S>`: pinned boxed runtime value
+- `SRcRefCell<T>`: shared `Rc<RefCell<_>>` state
+- `SArcMutex<T>`: shared `Arc<Mutex<_>>` state
+- `SArcRwLock<T>`: shared `Arc<RwLock<_>>` state
+
+Implementation methods usually constrain storage by capability:
+
+- `SRef`: read-only access to the runtime value
+- `SMut`: mutable access and ordinary transitions
+- `SPinRef`: pinned shared access
+- `SPinMut`: pinned mutable access and pinned transitions
+- `SMove`: storage can be moved by value
+
+This lets one method work across owned values, boxes, shared guards, and custom
+storage backends.
+
+## State Unions
+
+`StateUnion!` and `StateMachineDefinition! { union ... }` generate:
+
+- a public union marker, for example `Online`
+- a sealed membership trait, for example `InOnline`
+- a generated enum, for example `OnlineEnum<Storage, T>`
+
+Use the generated `In...` trait in method signatures:
 
 ```rust
-StateUnion!(Online, enum CustomOnline: Connected | Authenticated);
-StateUnion!(enum OnlineValue: Connected | Authenticated);
-```
-
-Union membership traits are sealed. They can inherit one or more previously
-defined union membership traits, with `+` separating supertrait markers and `|`
-separating member states:
-
-```rust
-StateUnion!(All: Disconnected | Connected | Authenticated);
-StateUnion!(Online: All, Connected | Authenticated);
-StateUnion!(Specific: All + Online, Connected | Authenticated);
-```
-
-Each union has a generated joint ZST state. `OnlineEnum<Storage, T>` preserves
-the concrete variant while every variant exposes the same
-`State<Storage, T, JointOnlineState>` view. Concrete states convert into the
-enum with `Into`, and matching variants recover their concrete state with
-`into_state()`. For enum-producing unions, the macro also generates a
-concrete-only conversion trait named after the union, such as
-`OnlineIntoEnum`. That trait excludes erased joint union states:
-
-```rust
-fn as_online_enum<S>(
-    self: State<S, Self, impl OnlineIntoEnum>,
-) -> OnlineEnum<S, Self>
+fn endpoint<S>(self: &State<S, Self, impl InOnline>) -> &str
 where
-    S: SRef,
+    S: magicstatemachines::SRef,
 {
-    <_ as OnlineIntoEnum>::into_enum(self)
-}
-```
-
-Functions with one success and one failure state can use the shorter result
-alias:
-
-```rust
-fn try_connect<S>(
-    self: State<S, Self, Disconnected>,
-) -> SResult<S, Self, Connected, Disconnected>;
-```
-
-Generated union enums dereference to their common erased union `State`. Existing
-inherent methods restricted by the union trait therefore work directly:
-
-```rust
-fn endpoint(
-    self: &State<impl SRef, Self, impl InOnline>,
-) -> &str {
     &self.endpoint
 }
-
-let online: OnlineEnum<_, Connection> = connected.into();
-online.endpoint();
 ```
 
-Consuming `into_erased()` exposes the erased union state. It has a transition to a
-target only when every member state has that transition with the same
-associated function signature. This permits generic shared transitions without
-weakening the state-machine contract.
-
-The concrete owned state marker is a zero-sized `PhantomData`;
-`#[repr(transparent)]` makes `StateOwned<T, S>` layout-compatible with `T`.
-
-`State<Storage, T, S>` generalizes over storage backends. The standard backends
-include directly owned values, `Box<T>`, `Pin<Box<T>>`, `UniqueRc<T>`,
-`UniqueArc<T>`, and mutable shared-state guards. That lets one implementation
-method preserve the storage backend:
+Use `EnumExt::into_enum` when runtime branching is needed (this incures the runtime cost of stack allocating the enum):
 
 ```rust
-fn connect<Storage>(
-    self: State<Storage, Self, Disconnected>,
-) -> State<Storage, Self, Connected>
-where
-    Storage: SRef,
-{
-    self.transition()()
+use magicstatemachines::EnumExt;
+
+match Online.into_enum(state) {
+    OnlineEnum::Connected(connected) => {
+        // connected: State<_, Connection, Connected>
+    }
+    OnlineEnum::Authenticated(authenticated) => {
+        // authenticated: State<_, Connection, Authenticated>
+    }
 }
 ```
 
-`SRef`, `SMut`, and `SMove` are storage capability traits. `SOwned` is the
-short alias for the directly owned storage backend.
+Use `In::into_discriminated` when the return type should remain a
+`DiscriminatedState<_, _, Online>`.
 
-Shared receivers such as `Rc<T>`, `Arc<T>`, and `&T` are deliberately not
-supported as state storage: they could alias one runtime value with
-independently evolving state tokens. `StateOwned<T, S>` implements `Clone` or
-`Copy` when `T` does and the state permits it through the default `StateClone`
-and `StateCopy` auto traits. A definition can opt a state out:
+## Pinned Transitions
+
+Pinned effects receive `Pin<&mut T>` instead of `&mut T`:
 
 ```rust
-impl !StateCopy for Connected {}
-impl !StateClone for Authenticated {}
+StateMachineImpl! {
+    Connection: ConnectionStandin;
+
+    pinned transition Disconnected => Connected() {
+        self.as_mut().mark_connected();
+    }
+}
 ```
 
-Opting out of `StateClone` also prevents `Copy`, as required by Rust's `Copy`
-contract. `core::ptr::Unique<T>` is not supported because it is a `Copy`
-raw-pointer primitive rather than an arbitrary-self receiver.
-
-Shared and interior-mutable values use `SharedState<Storage, T>`. The standard
-aliases make the backend explicit: `RefCellState<T>` uses `Rc<RefCell<_>>`,
-while `MutexState<T>` uses `Arc<Mutex<_>>`. These keep one authoritative erased
-state marker next to
-the data. Typed guards verify the current state, and a mutable guard commits its
-final state back to the parent when dropped:
+Call pinned transitions with:
 
 ```rust
-let shared = RefCellState::new::<Disconnected>(connection);
-let guard = shared.borrow_mut::<Disconnected>()?;
-let connected = guard.connect();
-drop(connected);
-
-let connected = shared.borrow::<Connected>()?;
+transition!(pin self)
 ```
 
-Erased state markers are stored as `&'static dyn StateTrait` by default. Enable
-the `dynZST` feature to store them through the pinned `dynzst` dependency
-instead. In both modes, generated `StateMarker` impls provide the erased static
-ZST reference; the library does not manufacture state references with unsafe
-code.
-Alternative lock or cell families implement the non-generic `SharedStorage`
-trait using its `Storage<T>` GAT. Ownership and synchronization compose as
-`RcState<MyStorage, T>` or `ArcState<MyStorage, T>`; the storage marker itself
-does not contain `T`.
+Pinned union transitions are also supported:
 
-Enable transition tracing with:
-
-```console
-cargo run -p test_use --features magicstatemachines/tracing
+```rust
+transition!(pin const Online self);
+transition!(pin dyn Online self);
 ```
 
-With tracing enabled, each `StateOwned` stores a `Vec<TraceEntry>`. Every entry
-stores the source and destination as erased `StateTrait` markers and also
-stores the caller location. The trace is preserved across decomposition and
-recomposition when `decompose` is also enabled and is available through
-`StateOwned::trace()`. Tracing adds runtime storage, and traced states cannot
-implement `Copy`.
+`pin const` requires every union member to share the same pinned body for the
+target transition. `pin dyn` discriminates the current concrete state and runs
+that state's pinned body.
+
+## Features
+
+- `dynZST`: stores dyn Trait over zero-sized types as a thin-pointer via my `dynzst` crate  (uses unsafe and relies to )
+- `tracing`: records transition source, target, and callsite - no longer zero-cost!
+- `unique-rc-arc`: enables `UniqueRc` and `UniqueArc` owned storage backends
+- the decompose feature is likely not so great, it allows for a state to be temporarily disconnected from the data, which is runtime enforced by equality on a random sentinal. This likely does break garantees by this api, because an attacker could brute force a collision. I should consider instead using an atomic counter that errors on overflow. but for now it is what it is.
+  - `decompose`: enables `StateOwned::decompose` and `StateOwned::recompose`
+  - `decompose-rand`: enables the stable `rand` backend for decomposition IDs
+  - `nightly-random`: uses nightly `std::random` for decomposition IDs
+## Layout
+
+`StateOwned<T, S>` is transparent over `T` outside of tracing. State markers are
+zero-sized, and storage wrappers are designed to preserve the backend layout
+where the state can be inferred from the type or from existing runtime storage.

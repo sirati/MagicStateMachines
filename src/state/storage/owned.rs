@@ -1,4 +1,6 @@
-use super::{SMove, SMut, SRef, State, StateStorage, StateStorageNew, TransitionCallsite};
+use super::{
+    SMove, SMut, SPinMut, SPinRef, SRef, State, StateStorage, StateStorageNew, TransitionCallsite,
+};
 use crate::state::owned::{StateOwned, complete_transition};
 use crate::{Initial, StateMachineImpl, Transition};
 use core::marker::PhantomData;
@@ -11,6 +13,7 @@ use std::sync::UniqueArc;
 /// Backend for directly owned values.
 pub struct StorageStateOwned;
 
+/// Short alias for [`StorageStateOwned`].
 pub type SOwned = StorageStateOwned;
 
 /// Backend for `Box<T>` owned values.
@@ -266,6 +269,24 @@ impl SRef for StorageStateOwnedPinBox {
         T: StateMachineImpl,
     {
         &inner.value
+    }
+}
+
+impl SPinRef for StorageStateOwnedPinBox {
+    fn s_pin_ref<T, S>(inner: &Self::Inner<T, S>) -> Pin<&T>
+    where
+        T: StateMachineImpl,
+    {
+        inner.value.as_ref()
+    }
+}
+
+impl SPinMut for StorageStateOwnedPinBox {
+    fn s_pin_mut<T, S>(inner: &mut Self::Inner<T, S>) -> Pin<&mut T>
+    where
+        T: StateMachineImpl,
+    {
+        inner.value.as_mut()
     }
 }
 

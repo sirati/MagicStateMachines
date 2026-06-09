@@ -5,12 +5,68 @@ use std::rc::UniqueRc;
 use std::sync::UniqueArc;
 
 /// Declares that a definition crate permits `TState` as an initial state.
+///
+/// This trait is normally emitted by
+/// [`StateMachineDefinition!`](macro@crate::StateMachineDefinition). It is the
+/// proof used by [`State::new`](crate::State::new),
+/// [`StateOwned::new`](crate::StateOwned::new), and shared-state constructors:
+/// creating a fresh state token only compiles for states declared in the
+/// definition crate.
+///
+/// ```ignore
+/// pub struct ConnectionStandin;
+/// pub struct Disconnected;
+///
+/// impl magicstatemachines::Initial<Disconnected> for ConnectionStandin {}
+/// ```
+///
+/// Most users should not write that impl manually; prefer:
+///
+/// ```ignore
+/// magicstatemachines::StateMachineDefinition! {
+///     for ConnectionStandin;
+///
+///     Initial: Disconnected;
+/// }
+/// ```
 pub trait Initial<TState> {}
 
 /// Declares that a definition crate permits `TFrom -> TTo`.
 ///
 /// The definition crate owns the stand-in and state types. Rust's orphan rules
-/// therefore prevent an implementation crate from adding transitions.
+/// therefore prevent an implementation crate from adding transitions. This
+/// trait is the graph edge only; it does not define what happens to the
+/// runtime value during the edge. Runtime effects are supplied later by
+/// [`StateMachineImpl!`](macro@crate::StateMachineImpl).
+///
+/// `F` is the required positional call signature for the transition. A
+/// zero-argument transition can use the default `fn()`. A transition that must
+/// be called with a `String` declares `type F = fn(String)`.
+///
+/// ```ignore
+/// pub struct ConnectionStandin;
+/// pub struct Connected;
+/// pub struct Authenticated;
+///
+/// impl magicstatemachines::Transition<Connected, Authenticated> for ConnectionStandin {
+///     type F = fn(String);
+/// }
+/// ```
+///
+/// With the definition macro, the same declaration is usually written as:
+///
+/// ```ignore
+/// magicstatemachines::StateMachineDefinition! {
+///     for ConnectionStandin;
+///
+///     Initial: Connected;
+///     transition Connected => Authenticated(user: String);
+/// }
+/// ```
+///
+/// The name `user` is documentation for the contract and for the matching
+/// implementation body. The actual transition call remains positional:
+/// `transition!(self, user.into())`.
 pub trait Transition<TFrom, TTo> {
     /// Function signature required to perform this transition.
     type F = fn();
@@ -49,24 +105,29 @@ transition_signature_impls! {
 ///
 /// Implementations are `'static` so storage backends can provide borrowed
 /// guard families without repeating the implementation type in the backend.
+/// The associated `Standin` selects the definition-crate contract, while
+/// `TransitionToken` is the private capability required to perform retagging.
 ///
 /// [`crate::StateMachineImpl!`] generates this implementation and keeps the
-/// transition capability's construction private:
+/// transition capability's construction private. Code outside the invocation
+/// module cannot manufacture the token:
 ///
 /// ```compile_fail
-/// use magicstatemachines::{Initial, State, StateMachineImpl, StorageStateOwned, Transition};
+/// use magicstatemachines::{Initial, State, StateMachineImpl, States, StorageStateOwned, Transition};
 ///
 /// mod implementation {
 ///     use super::*;
 ///
-///     pub struct Machine;
-///     pub struct Ready;
-///     pub struct Running;
+///     pub struct Standin;
 ///     pub struct Runtime;
-///     impl Initial<Ready> for Machine {}
-///     impl Transition<Ready, Running> for Machine {}
+///     States! {
+///         Ready;
+///         Running;
+///     }
+///     impl Initial<Ready> for Standin {}
+///     impl Transition<Ready, Running> for Standin {}
 ///
-///     magicstatemachines::StateMachineImpl!(Runtime: Machine);
+///     magicstatemachines::StateMachineImpl!(Runtime: Standin; transition Ready => Running(););
 ///
 ///     pub fn ready() -> State<StorageStateOwned, Runtime, Ready> {
 ///         State::new(Runtime)
@@ -77,25 +138,29 @@ transition_signature_impls! {
 /// let _ = magicstatemachines::transition_state::<_, _, _, implementation::Running>(
 ///     ready,
 ///     implementation::__StateMachineTransitionToken(())
-/// )();
+/// ).call(());
 /// ```
 ///
-/// The generated ergonomic method is private to the invocation module:
+/// The generated ergonomic helpers are also private to the invocation module.
+/// This means implementation methods can call [`transition!`](macro@crate::transition),
+/// but external callers can only call the methods you expose:
 ///
 /// ```compile_fail
-/// use magicstatemachines::{Initial, State, StorageStateOwned, Transition};
+/// use magicstatemachines::{Initial, State, States, StorageStateOwned, Transition};
 ///
 /// mod implementation {
 ///     use super::*;
 ///
-///     pub struct Machine;
-///     pub struct Ready;
-///     pub struct Running;
+///     pub struct Standin;
 ///     pub struct Runtime;
+///     States! {
+///         Ready;
+///         Running;
+///     }
 ///
-///     impl Initial<Ready> for Machine {}
-///     impl Transition<Ready, Running> for Machine {}
-///     magicstatemachines::StateMachineImpl!(Runtime: Machine);
+///     impl Initial<Ready> for Standin {}
+///     impl Transition<Ready, Running> for Standin {}
+///     magicstatemachines::StateMachineImpl!(Runtime: Standin; transition Ready => Running(););
 ///
 ///     pub fn ready() -> State<StorageStateOwned, Runtime, Ready> {
 ///         State::new(Runtime)
@@ -103,7 +168,7 @@ transition_signature_impls! {
 /// }
 ///
 /// let ready = implementation::ready();
-/// let _ = ready.transition::<implementation::Running>()();
+/// let _ = magicstatemachines::transition!(ready);
 /// ```
 pub trait StateMachineImpl: 'static {
     /// Definition-crate ZST used to select the state-machine contract.

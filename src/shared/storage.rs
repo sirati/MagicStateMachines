@@ -16,7 +16,9 @@ pub struct SharedValue<T> {
 /// Failure caused by asking a shared container for the wrong state marker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WrongStateError {
+    /// Requested state or union marker type name.
     pub expected: &'static str,
+    /// Committed concrete state type name.
     pub actual: &'static str,
 }
 
@@ -35,7 +37,9 @@ impl std::error::Error for WrongStateError {}
 /// Failure to acquire a typed view of shared state.
 #[derive(Debug)]
 pub enum SharedStateError<StorageError = core::convert::Infallible> {
+    /// The container was borrowed successfully, but the committed state did not match.
     WrongState(WrongStateError),
+    /// The backing storage could not be borrowed or locked.
     Storage(StorageError),
 }
 
@@ -63,38 +67,91 @@ impl<StorageError> From<WrongStateError> for SharedStateError<StorageError> {
 }
 
 /// Replaceable storage backend for [`super::SharedState`].
+///
+/// Implement this trait when the built-in [`RefCellStorage`],
+/// [`MutexStorage`], and [`RwLockStorage`] do not match the container you want
+/// to use. The backend owns the actual synchronization primitive and returns
+/// guard types that dereference to [`SharedValue<T>`].
+///
+/// The library does not collapse backend errors into a custom borrowed/poisoned
+/// enum. Your `ReadError` and `WriteError` associated types are preserved and
+/// returned as [`SharedStateError::Storage`].
+///
+/// A custom backend has this shape:
+///
+/// ```ignore
+/// use magicstatemachines::{SArc, SharedStorage, SharedValue};
+/// use std::sync::{Mutex, MutexGuard, TryLockError};
+///
+/// pub struct MyMutexStorage;
+///
+/// impl SharedStorage for MyMutexStorage {
+///     type Storage<T> = Mutex<SharedValue<T>>;
+///     type ReadGuard<'a, T> = MutexGuard<'a, SharedValue<T>> where T: 'a;
+///     type WriteGuard<'a, T> = MutexGuard<'a, SharedValue<T>> where T: 'a;
+///     type ReadError<'a, T> = TryLockError<MutexGuard<'a, SharedValue<T>>> where T: 'a;
+///     type WriteError<'a, T> = TryLockError<MutexGuard<'a, SharedValue<T>>> where T: 'a;
+///
+///     fn new<T>(value: SharedValue<T>) -> Self::Storage<T> {
+///         Mutex::new(value)
+///     }
+///
+///     fn read<T>(
+///         storage: &Self::Storage<T>,
+///     ) -> Result<Self::ReadGuard<'_, T>, Self::ReadError<'_, T>> {
+///         storage.try_lock()
+///     }
+///
+///     fn write<T>(
+///         storage: &Self::Storage<T>,
+///     ) -> Result<Self::WriteGuard<'_, T>, Self::WriteError<'_, T>> {
+///         storage.try_lock()
+///     }
+/// }
+///
+/// type SArcMyMutex<T> = SArc<MyMutexStorage, T>;
+/// ```
 pub trait SharedStorage {
+    /// Concrete cell or lock type containing [`SharedValue<T>`].
     type Storage<T>;
 
+    /// Guard returned by read access.
     type ReadGuard<'a, T>: Deref<Target = SharedValue<T>>
     where
         Self: 'a,
         T: 'a;
 
+    /// Guard returned by write access.
     type WriteGuard<'a, T>: DerefMut<Target = SharedValue<T>>
     where
         Self: 'a,
         T: 'a;
 
+    /// Error returned by read access.
     type ReadError<'a, T>
     where
         Self: 'a,
         T: 'a;
 
+    /// Error returned by write access.
     type WriteError<'a, T>
     where
         Self: 'a,
         T: 'a;
 
+    /// Creates backend storage containing the authoritative state and runtime data.
     fn new<T>(value: SharedValue<T>) -> Self::Storage<T>;
+    /// Attempts read access to the backend storage.
     fn read<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::ReadGuard<'_, T>, Self::ReadError<'_, T>>;
+    /// Attempts write access to the backend storage.
     fn write<T>(
         storage: &Self::Storage<T>,
     ) -> Result<Self::WriteGuard<'_, T>, Self::WriteError<'_, T>>;
 }
 
+/// [`SharedStorage`] implementation backed by [`RefCell`].
 pub struct RefCellStorage;
 
 impl SharedStorage for RefCellStorage {
@@ -133,6 +190,7 @@ impl SharedStorage for RefCellStorage {
     }
 }
 
+/// [`SharedStorage`] implementation backed by [`Mutex`].
 pub struct MutexStorage;
 
 impl SharedStorage for MutexStorage {
@@ -171,6 +229,7 @@ impl SharedStorage for MutexStorage {
     }
 }
 
+/// [`SharedStorage`] implementation backed by [`RwLock`].
 pub struct RwLockStorage;
 
 impl SharedStorage for RwLockStorage {

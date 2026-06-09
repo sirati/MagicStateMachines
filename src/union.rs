@@ -1,8 +1,9 @@
 use crate::{
-    SMove, SMut, SRef, State, StateInference, StateMachineImpl, StateMarker, StateStorage,
-    StateTrait, Transition, TransitionCallsite, TransitionProof, UnionStateKind, state_trait,
+    SMove, SMut, SPinMut, SPinRef, SRef, State, StateInference, StateMachineImpl, StateMarker,
+    StateStorage, StateTrait, Transition, TransitionCallsite, TransitionProof, UnionStateKind,
+    state_trait,
 };
-use core::{any::TypeId, marker::PhantomData};
+use core::{any::TypeId, marker::PhantomData, pin::Pin};
 
 /// State marker shared by every member of a generated state union.
 #[doc(hidden)]
@@ -26,8 +27,24 @@ impl<Marker> !StateUnionConcreteState for StateUnionState<Marker> {}
 #[doc(hidden)]
 pub trait StateUnionMember<State> {}
 
-/// Selects the value-carrying discriminated state type for a union marker.
+/// Selects the value-carrying enum type for a union marker.
+///
+/// `StateUnion!` implements this for the generated marker. For
+/// `StateUnion!(Online: Connected | Authenticated)`, the associated `Enum` is
+/// `OnlineEnum<Storage, T>` unless a custom enum name was supplied.
+///
+/// Users normally do not implement this trait manually. It is useful in
+/// generic APIs that need to name the enum associated with a marker:
+///
+/// ```ignore
+/// type OnlineValue<S, T> =
+///     <Online as magicstatemachines::StateUnionDiscriminant>::Enum<S, T>;
+/// ```
 pub trait StateUnionDiscriminant: Sized + StateMarker<Kind = UnionStateKind> {
+    /// Generated enum that can hold any concrete member state of this union.
+    ///
+    /// For `StateUnion!(Online: Connected | Authenticated)`, this is
+    /// `OnlineEnum<Storage, T>` unless a custom enum name was supplied.
     type Enum<Storage, T>
     where
         Storage: StateStorage,
@@ -43,12 +60,52 @@ pub trait StateUnionDiscriminant: Sized + StateMarker<Kind = UnionStateKind> {
 }
 
 /// Marks a state as being a concrete marker or a member of a generated state union.
+///
+/// Every concrete state implements `In<Self>`. Generated union membership
+/// traits such as `InOnline` extend `In<Online>` and add sealing/proof bounds.
+///
+/// Prefer the generated trait (`InOnline`) in normal function signatures. The
+/// generated trait carries the sealed union contract and any generated
+/// super-union relationships, so a value accepted as `impl InOnline` can also
+/// be used with APIs that accept wider generated traits such as `impl InAll`.
+/// A bare `impl In<Online>` proves only membership in that one marker and does
+/// not give Rust the same widened trait bounds.
+///
+/// ```ignore
+/// fn endpoint<S>(self: &State<S, Connection, impl InOnline>) -> &str
+/// where
+///     S: SRef,
+/// {
+///     &self.endpoint
+/// }
+/// ```
+///
+/// Use the generic form (`In<Online>`) when the marker is itself a type
+/// parameter, or when calling the associated conversion function explicitly.
+/// It is a lower-level building block, not the best ergonomic bound for public
+/// methods:
+///
+/// ```ignore
+/// fn to_online<S, Current>(
+///     state: State<S, Connection, Current>,
+/// ) -> DiscriminatedState<S, Connection, Online>
+/// where
+///     S: StateStorage,
+///     Current: In<Online>,
+/// {
+///     <Current as In<Online>>::into_discriminated(state)
+/// }
+/// ```
 pub trait In<Marker>: StateTrait + StateMarker
 where
     Marker: StateMarker,
 {
+    /// Converts a concrete member state into the union's discriminated state.
+    ///
+    /// The returned [`DiscriminatedState`] keeps enough runtime information to
+    /// recover the concrete enum variant later with `discriminate()`.
     #[must_use]
-    fn into_enum<Storage, T>(
+    fn into_discriminated<Storage, T>(
         state: State<Storage, T, Self>,
     ) -> DiscriminatedState<Storage, T, Marker>
     where
@@ -75,7 +132,7 @@ impl<StateMarkerType> In<StateMarkerType> for StateMarkerType
 where
     StateMarkerType: StateTrait + StateMarker,
 {
-    fn into_enum<Storage, T>(
+    fn into_discriminated<Storage, T>(
         _state: State<Storage, T, Self>,
     ) -> DiscriminatedState<Storage, T, StateMarkerType>
     where
@@ -88,20 +145,55 @@ where
     }
 }
 
-/// Value-carrying discriminated state for a generated union marker.
-pub type DiscriminatedState<Storage, T, Marker> = State<
-    SDiscriminated<Storage>,
-    T,
-    StateUnionState<Marker>,
->;
+/// Union-typed state that still remembers its concrete variant.
+///
+/// This is a type alias for `State<SDiscriminated<Storage>, T,
+/// StateUnionState<Marker>>`. The outer state marker is the union, so methods
+/// can accept it as "any online state". The storage wrapper remembers the
+/// exact concrete member, so `discriminate()` can later recover the generated
+/// enum:
+///
+/// ```ignore
+/// let online: DiscriminatedState<SOwned, Connection, Online> =
+///     <Connected as In<Online>>::into_discriminated(connected);
+///
+/// match online.discriminate() {
+///     OnlineEnum::Connected(connected) => {
+///         // `connected` is State<SOwned, Connection, Connected>.
+///     }
+///     OnlineEnum::Authenticated(authenticated) => {
+///         // `authenticated` is State<SOwned, Connection, Authenticated>.
+///     }
+/// }
+/// ```
+///
+/// Dynamic union transitions use the same discriminator internally. That is
+/// why `transition!(dyn Online self)` can run different bodies for different
+/// union members.
+pub type DiscriminatedState<Storage, T, Marker> =
+    State<SDiscriminated<Storage>, T, StateUnionState<Marker>>;
 
-impl<Storage, T, Marker>
-    State<SDiscriminated<Storage>, T, StateUnionState<Marker>>
+impl<Storage, T, Marker> State<SDiscriminated<Storage>, T, StateUnionState<Marker>>
 where
     Storage: StateStorage,
     T: StateMachineImpl,
     Marker: StateUnionDiscriminant,
 {
+    /// Recovers the generated enum for this discriminated union state.
+    ///
+    /// This is the runtime branch point: after matching on the enum, each
+    /// variant can be converted back into its concrete state.
+    ///
+    /// ```ignore
+    /// match online.discriminate() {
+    ///     OnlineEnum::Connected(connected) => {
+    ///         let authenticated = connected.authenticate("alice");
+    ///     }
+    ///     OnlineEnum::Authenticated(authenticated) => {
+    ///         let connected = authenticated.logout();
+    ///     }
+    /// }
+    /// ```
     #[must_use]
     pub fn discriminate(self) -> <Marker as StateUnionDiscriminant>::Enum<Storage, T> {
         Marker::discriminate(self)
@@ -189,14 +281,15 @@ where
     T: StateMachineImpl,
     S: StateTrait,
 {
-    state.inner.inference.state::<Storage, T, S>(&state.inner.inner)
+    state
+        .inner
+        .inference
+        .state::<Storage, T, S>(&state.inner.inner)
 }
 
 #[doc(hidden)]
 #[must_use]
-pub fn state_union_marker<Storage, T, S>(
-    state: &State<Storage, T, S>,
-) -> state_trait::ErasedState
+pub fn state_union_marker<Storage, T, S>(state: &State<Storage, T, S>) -> state_trait::ErasedState
 where
     Storage: StateStorage,
     T: StateMachineImpl,
@@ -229,9 +322,9 @@ where
 
     type Inner<T, S>
         = DiscriminatedInner<
-            Storage::Inner<T, S>,
-            <Storage::Inference as crate::InferenceKind>::Inference,
-        >
+        Storage::Inner<T, S>,
+        <Storage::Inference as crate::InferenceKind>::Inference,
+    >
     where
         T: StateMachineImpl;
     type Machine<T>
@@ -331,11 +424,31 @@ where
     }
 }
 
-impl<Storage> SMove for SDiscriminated<Storage>
+impl<Storage> SPinRef for SDiscriminated<Storage>
 where
-    Storage: SMove,
+    Storage: SPinRef,
 {
+    fn s_pin_ref<T, S>(inner: &Self::Inner<T, S>) -> core::pin::Pin<&T>
+    where
+        T: StateMachineImpl,
+    {
+        Storage::s_pin_ref(&inner.inner)
+    }
 }
+
+impl<Storage> SPinMut for SDiscriminated<Storage>
+where
+    Storage: SPinMut,
+{
+    fn s_pin_mut<T, S>(inner: &mut Self::Inner<T, S>) -> core::pin::Pin<&mut T>
+    where
+        T: StateMachineImpl,
+    {
+        Storage::s_pin_mut(&mut inner.inner)
+    }
+}
+
+impl<Storage> SMove for SDiscriminated<Storage> where Storage: SMove {}
 
 /// Converts a concrete or already-erased member state into a union state.
 #[doc(hidden)]
@@ -401,6 +514,27 @@ where
     fn apply(value: &mut T, args: Args);
 }
 
+/// Selects the pinned implementation effect shared by every member of a generated state union.
+#[doc(hidden)]
+pub trait StateUnionSharedPinnedEffect<T, To>: StateUnionDiscriminant
+where
+    T: StateMachineImpl,
+    To: crate::ConcreteStateTrait,
+{
+    type Effect;
+}
+
+/// Applies the shared pinned implementation effect for an erased union state.
+#[doc(hidden)]
+pub trait StateUnionSharedPinnedTransitionEffect<T, To, Args>:
+    StateUnionSharedPinnedEffect<T, To>
+where
+    T: StateMachineImpl,
+    To: crate::ConcreteStateTrait,
+{
+    fn apply_pinned(value: Pin<&mut T>, args: Args);
+}
+
 /// Dispatches a discriminated union transition to the concrete state's effect.
 #[doc(hidden)]
 pub trait StateUnionDiscriminatedTransition<T, To, Args>: StateUnionDiscriminant
@@ -414,6 +548,22 @@ where
     ) -> State<Storage, T, To>
     where
         Storage: SMut,
+        To: crate::ConcreteStateTrait;
+}
+
+/// Dispatches a pinned discriminated union transition to the concrete state's effect.
+#[doc(hidden)]
+pub trait StateUnionDiscriminatedPinnedTransition<T, To, Args>: StateUnionDiscriminant
+where
+    T: StateMachineImpl,
+{
+    fn pinned_transition<Storage>(
+        state: DiscriminatedState<Storage, T, Self>,
+        args: Args,
+        callsite: TransitionCallsite,
+    ) -> State<Storage, T, To>
+    where
+        Storage: SPinMut,
         To: crate::ConcreteStateTrait;
 }
 

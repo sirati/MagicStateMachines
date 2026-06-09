@@ -1,12 +1,11 @@
 mod owned;
 
 use crate::{
-    ConcreteStateKind, DiscriminatedState, Initial, StateConcreteProvenState, StateMachineImpl,
-    StateConcreteTransitionProof, StateKind, StateUnionDiscriminant,
+    ConcreteStateKind, DiscriminatedState, Initial, StateConcreteProvenState,
+    StateConcreteTransitionProof, StateKind, StateMachineImpl, StateUnionDiscriminant,
     StateUnionDiscriminatedTransition, StateUnionErased, StateUnionProofTarget,
     StateUnionProvenState, StateUnionSharedEffect, StateUnionSharedTransitionEffect,
-    StateUnionTransitionProof, StateWithProof, Transition, UnionStateKind,
-    state_trait,
+    StateUnionTransitionProof, StateWithProof, Transition, UnionStateKind, state_trait,
 };
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -22,7 +21,38 @@ pub use owned::{SOwned, StorageStateOwned, StorageStateOwnedBox, StorageStateOwn
 #[cfg(feature = "unique-rc-arc")]
 pub use owned::{StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc};
 
+/// Owned state whose runtime value is stored in `Box<T>`.
+///
+/// This is only a type alias for `State<StorageStateOwnedBox, T, S>`. Create it
+/// from an already-owned state with [`SBox::new`](State<StorageStateOwnedBox, T, S>::new)
+/// so the current state is preserved while changing containers:
+///
+/// ```ignore
+/// let owned: State<SOwned, Connection, Disconnected> = State::new(connection);
+/// let boxed: SBox<Connection, Disconnected> = SBox::new(owned);
+/// ```
 pub type SBox<T, S> = State<StorageStateOwnedBox, T, S>;
+/// Owned state whose runtime value is stored in `Pin<Box<T>>`.
+///
+/// This is the pinned counterpart to [`SBox`]. Pinning consumes a boxed state
+/// rather than raw `T`, again preserving the already-proven current state.
+///
+/// Pinned storage is deliberately not just "boxed plus `SMut`". For
+/// `T: !Unpin`, the backend can expose [`Pin<&T>`](core::pin::Pin) and
+/// `Pin<&mut T>` through [`SPinRef`] and [`SPinMut`], but it does not expose
+/// `&mut T`. That means ordinary transitions requiring `S: SMut` stay
+/// unavailable, while pinned transition methods can still be written:
+///
+/// ```ignore
+/// impl Connection {
+///     fn connect<S>(self: State<S, Self, Disconnected>) -> State<S, Self, Connected>
+///     where
+///         S: magicstatemachines::SPinMut,
+///     {
+///         magicstatemachines::transition!(pin self)
+///     }
+/// }
+/// ```
 pub type SPinBox<T, S> = State<StorageStateOwnedPinBox, T, S>;
 
 fn retag_owned<T, From, To>(inner: crate::StateOwned<T, From>) -> crate::StateOwned<T, To> {
@@ -43,6 +73,12 @@ pub trait TransitionEffectSelector<From, To>: StateMachineImpl {
     type Effect;
 }
 
+/// Selects the pinned implementation-side effect for a declared transition.
+#[doc(hidden)]
+pub trait PinnedTransitionEffectSelector<From, To>: StateMachineImpl {
+    type Effect;
+}
+
 /// Applies implementation-side transition effects before the state is retagged.
 #[doc(hidden)]
 pub trait TransitionEffect<T, From, To, Args>
@@ -50,6 +86,21 @@ where
     T: StateMachineImpl,
 {
     fn apply(value: &mut T, args: Args);
+}
+
+/// Applies implementation-side transition effects through pinned access.
+///
+/// This is the pinned counterpart to [`TransitionEffect`]. It is used by
+/// `pinned transition` entries in [`StateMachineImpl!`](macro@crate::StateMachineImpl)
+/// and by [`transition!(pin state, ...)`](macro@crate::transition). The effect
+/// receives `Pin<&mut T>`, so a `!Unpin` runtime can update interior fields or
+/// call pinned methods without ever exposing `&mut T`.
+#[doc(hidden)]
+pub trait PinnedTransitionEffect<T, From, To, Args>
+where
+    T: StateMachineImpl,
+{
+    fn apply(value: Pin<&mut T>, args: Args);
 }
 
 /// Selects where a storage backend's authoritative state marker is inferred.
@@ -146,6 +197,45 @@ impl StateInference for InnerStateInference {
 }
 
 /// Storage backend used by [`State`].
+///
+/// `State<Storage, T, S>` is only a typed view; the actual representation is
+/// selected by this trait. The same implementation methods can therefore work
+/// for directly owned values, boxed values, pinned values, shared guard views,
+/// and discriminated union views as long as they ask for the right capability
+/// bound.
+///
+/// Backend authors provide an `Inner<T, S>` generic associated type. The
+/// library retags that `Inner` after a successful transition, so the backend
+/// controls where data is stored while the state-machine contract still
+/// controls which retags are legal.
+///
+/// Most users do not implement this trait. They choose one of the built-in
+/// storage aliases and write bounds on methods:
+///
+/// ```ignore
+/// use magicstatemachines::{SRef, SMut, State, transition};
+/// use test_def::{InOnline, Online};
+/// use test_def::states::{Authenticated, Connected};
+///
+/// impl Connection {
+///     fn endpoint<S>(self: &State<S, Self, impl InOnline>) -> &str
+///     where
+///         S: SRef,
+///     {
+///         &self.endpoint
+///     }
+///
+///     fn authenticate<S>(
+///         self: State<S, Self, Connected>,
+///         user: String,
+///     ) -> State<S, Self, Authenticated>
+///     where
+///         S: SMut,
+///     {
+///         transition!(self, user)
+///     }
+/// }
+/// ```
 pub trait StateStorage: Sized {
     /// Selects how [`SDiscriminated`](crate::SDiscriminated) recovers the current state marker.
     type Inference: InferenceKind = OuterInference;
@@ -165,6 +255,11 @@ pub trait StateStorage: Sized {
     where
         T: StateMachineImpl;
 
+    /// Retags a state after checking that `Args` matches the declared transition signature.
+    ///
+    /// Storage backends normally delegate this to their inner representation.
+    /// Implementation crates should call transitions through [`transition!`](macro@crate::transition)
+    /// rather than invoking this method directly.
     fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         args: Args,
@@ -213,7 +308,11 @@ where
 }
 
 /// Storage backend that can create initial owned state.
+///
+/// This is the capability behind [`State::new`]. The `Initial` bound prevents
+/// raw runtime data from being introduced in a non-initial state.
 pub trait StateStorageNew: StateStorage {
+    /// Creates a backend-specific inner value in an allowed initial state.
     fn new<T, State>(value: T) -> Self::Inner<T, State>
     where
         T: StateMachineImpl,
@@ -221,23 +320,108 @@ pub trait StateStorageNew: StateStorage {
 }
 
 /// Storage backend that can expose a runtime reference.
+///
+/// Use `S: SRef` for methods that only read the runtime implementation. This
+/// bound covers owned states, boxed/pinned states, and read or write guards
+/// from shared storage.
 pub trait SRef: StateStorage {
+    /// Borrows the runtime implementation from this storage backend.
     fn s_ref<T, State>(inner: &Self::Inner<T, State>) -> &T
     where
         T: StateMachineImpl;
 }
 
 /// Storage backend that can expose a mutable runtime reference.
+///
+/// Use `S: SMut` for methods that mutate runtime data or call
+/// [`transition!`](macro@crate::transition). Transition effect bodies always
+/// receive `&mut T`, so a transition method normally needs this bound even if
+/// the body is empty.
 pub trait SMut: SRef {
+    /// Mutably borrows the runtime implementation from this storage backend.
     fn s_mut<T, State>(inner: &mut Self::Inner<T, State>) -> &mut T
     where
         T: StateMachineImpl;
 }
 
+/// Storage backend that can expose a pinned runtime reference.
+///
+/// This capability is separate from [`SRef`] and [`SMut`] because pinning is
+/// stronger than ordinary borrowing. A backend should implement this only when
+/// it can prove the runtime value will not be moved for the lifetime of the
+/// storage object. [`SPinBox`](crate::SPinBox) does; ordinary owned storage
+/// intentionally does not.
+///
+/// Use this bound for read-only methods that must call APIs taking
+/// `Pin<&Self>`:
+///
+/// ```ignore
+/// fn stable_address<S>(self: &State<S, Self, Ready>) -> usize
+/// where
+///     S: magicstatemachines::SPinRef,
+/// {
+///     magicstatemachines::pin_ref(self).stable_address()
+/// }
+/// ```
+pub trait SPinRef: SRef {
+    /// Borrows the runtime implementation as a pinned shared reference.
+    fn s_pin_ref<T, State>(inner: &Self::Inner<T, State>) -> Pin<&T>
+    where
+        T: StateMachineImpl;
+}
+
+/// Storage backend that can expose a pinned mutable runtime reference.
+///
+/// This is the capability required by pinned transition effects. It does not
+/// imply [`SMut`]: a backend may safely provide `Pin<&mut T>` for `!Unpin`
+/// values while still refusing to provide `&mut T`.
+pub trait SPinMut: SPinRef {
+    /// Mutably borrows the runtime implementation as a pinned reference.
+    fn s_pin_mut<T, State>(inner: &mut Self::Inner<T, State>) -> Pin<&mut T>
+    where
+        T: StateMachineImpl;
+}
+
 /// Storage backend whose state token can be consumed by value.
+///
+/// Use this when an API must move the backend representation itself rather
+/// than just read or mutate the runtime value. Most transition methods only
+/// need [`SMut`].
 pub trait SMove: StateStorage {}
 
-/// A state token parameterized by its storage backend.
+/// A state token parameterized by storage, runtime implementation, and state.
+///
+/// The type parameters carry the whole proof:
+///
+/// - `Storage` selects how the runtime value is held, for example
+///   [`SOwned`](crate::SOwned), [`StorageStateOwnedBox`], or a mutable guard
+///   from shared storage.
+/// - `T` is the runtime implementation type, such as `Connection`.
+/// - `S` is the current state marker, such as `Disconnected` or
+///   `impl InOnline`.
+///
+/// `State` is intentionally a deref-like wrapper with very few inherent
+/// methods. State-machine behavior should be implemented on `T` with
+/// arbitrary self types, not added as generic convenience methods on `State`.
+/// That keeps the transition capability private to the implementation module.
+///
+/// ```ignore
+/// impl Connection {
+///     fn connect<S>(self: State<S, Self, Disconnected>) -> State<S, Self, Connected>
+///     where
+///         S: SMut,
+///     {
+///         magicstatemachines::transition!(self)
+///     }
+///
+///     fn endpoint<S>(self: &State<S, Self, impl InOnline>) -> &str
+///     where
+///         S: SRef,
+///     {
+///         &self.endpoint
+///     }
+/// }
+/// ```
 pub struct State<Storage, T, S>
 where
     T: StateMachineImpl,
@@ -248,6 +432,24 @@ where
 }
 
 /// A result whose success and error values are states of the same machine.
+///
+/// This is useful for fallible state-machine methods where both branches
+/// return ownership of the same runtime value in different states:
+///
+/// ```ignore
+/// fn authenticate_if<S>(
+///     self: State<S, Connection, Connected>,
+///     user: Option<String>,
+/// ) -> SResult<S, Connection, Authenticated, Connected>
+/// where
+///     S: SMut,
+/// {
+///     match user {
+///         Some(user) => Ok(magicstatemachines::transition!(self, user)),
+///         None => Err(self),
+///     }
+/// }
+/// ```
 #[allow(type_alias_bounds)]
 pub type SResult<Storage, T, OkState, ErrState>
 where
@@ -256,6 +458,7 @@ where
 = Result<State<Storage, T, OkState>, State<Storage, T, ErrState>>;
 
 /// A callable transition for generic [`State`] storage.
+#[doc(hidden)]
 pub struct StateTransitionCall<Storage, T, From, To>
 where
     T: StateMachineImpl,
@@ -270,6 +473,18 @@ where
 /// A callable transition that first routes through implementation-owned effects.
 #[doc(hidden)]
 pub struct EffectTransitionCall<Storage, T, From, To, Effect>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+{
+    state: State<Storage, T, From>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> (To, Effect)>,
+}
+
+/// A callable transition that runs a pinned implementation-side effect first.
+#[doc(hidden)]
+pub struct PinnedEffectTransitionCall<Storage, T, From, To, Effect>
 where
     T: StateMachineImpl,
     Storage: StateStorage,
@@ -322,6 +537,21 @@ where
     marker: PhantomData<fn() -> (Marker, To)>,
 }
 
+/// A callable pinned transition proven through a generated state union.
+#[doc(hidden)]
+pub struct PinnedStateUnionProofTransitionCall<Storage, T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    From: crate::StateTrait,
+    Marker: StateUnionDiscriminant,
+    To: crate::ConcreteStateTrait,
+{
+    state: State<Storage, T, From>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> (Marker, To)>,
+}
+
 /// A callable discriminated-union transition that returns to the original storage after transition.
 #[doc(hidden)]
 pub struct DiscriminatedTransitionCall<Storage, T, Marker, To>
@@ -335,10 +565,25 @@ where
     marker: PhantomData<fn() -> To>,
 }
 
+/// A callable pinned discriminated-union transition.
+#[doc(hidden)]
+pub struct PinnedDiscriminatedTransitionCall<Storage, T, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    Marker: StateUnionDiscriminant,
+{
+    state: DiscriminatedState<Storage, T, Marker>,
+    callsite: TransitionCallsite,
+    marker: PhantomData<fn() -> To>,
+}
+
 #[cfg(feature = "tracing")]
+#[doc(hidden)]
 pub type TransitionCallsite = &'static Location<'static>;
 
 #[cfg(not(feature = "tracing"))]
+#[doc(hidden)]
 pub type TransitionCallsite = ();
 
 #[doc(hidden)]
@@ -357,6 +602,7 @@ where
     T: StateMachineImpl,
     Storage: StateStorage,
 {
+    #[doc(hidden)]
     pub fn call<Args>(self, args: Args) -> State<Storage, T, To>
     where
         T::Standin: Transition<From, To>,
@@ -394,6 +640,25 @@ where
     }
 }
 
+impl<Storage, T, From, To, Effect> PinnedEffectTransitionCall<Storage, T, From, To, Effect>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+{
+    pub fn call<Args>(mut self, args: Args) -> State<Storage, T, To>
+    where
+        Storage: SPinMut,
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        From: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
+        Effect: PinnedTransitionEffect<T, From, To, Args>,
+    {
+        Effect::apply(Storage::s_pin_mut(&mut self.state.inner), args);
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
 impl<Storage, T, From, To> ConcreteProofTransitionCall<Storage, T, From, To>
 where
     T: StateMachineImpl,
@@ -417,7 +682,8 @@ where
     }
 }
 
-impl<Storage, T, From, Marker, To> KindProofTransitionCall<Storage, T, From, Marker, To, ConcreteStateKind>
+impl<Storage, T, From, Marker, To>
+    KindProofTransitionCall<Storage, T, From, Marker, To, ConcreteStateKind>
 where
     T: StateMachineImpl,
     Storage: StateStorage,
@@ -443,7 +709,8 @@ where
     }
 }
 
-impl<Storage, T, From, Marker, To> KindProofTransitionCall<Storage, T, From, Marker, To, UnionStateKind>
+impl<Storage, T, From, Marker, To>
+    KindProofTransitionCall<Storage, T, From, Marker, To, UnionStateKind>
 where
     T: StateMachineImpl,
     Storage: StateStorage,
@@ -458,7 +725,7 @@ where
         Marker: StateUnionDiscriminatedTransition<T, To, Args>,
         To: crate::ConcreteStateTrait,
     {
-        let state = <From as crate::In<Marker>>::into_enum(self.state);
+        let state = <From as crate::In<Marker>>::into_discriminated(self.state);
         Marker::transition(state, args, self.callsite)
     }
 }
@@ -483,6 +750,26 @@ where
     }
 }
 
+impl<Storage, T, From, Marker, To> PinnedStateUnionProofTransitionCall<Storage, T, From, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    From: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
+    Marker: StateUnionDiscriminant,
+{
+    pub fn call<Args>(mut self, args: Args) -> State<Storage, T, To>
+    where
+        Storage: SPinMut,
+        From: StateUnionErased<Marker>,
+        Marker: crate::StateUnionSharedPinnedTransitionEffect<T, To, Args>,
+        To: crate::ConcreteStateTrait,
+    {
+        Marker::apply_pinned(Storage::s_pin_mut(&mut self.state.inner), args);
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
 impl<Storage, T, Marker, To> DiscriminatedTransitionCall<Storage, T, Marker, To>
 where
     T: StateMachineImpl,
@@ -496,6 +783,22 @@ where
         To: crate::ConcreteStateTrait,
     {
         Marker::transition(self.state, args, self.callsite)
+    }
+}
+
+impl<Storage, T, Marker, To> PinnedDiscriminatedTransitionCall<Storage, T, Marker, To>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    Marker: StateUnionDiscriminant,
+{
+    pub fn call<Args>(self, args: Args) -> State<Storage, T, To>
+    where
+        Storage: SPinMut,
+        Marker: crate::StateUnionDiscriminatedPinnedTransition<T, To, Args>,
+        To: crate::ConcreteStateTrait,
+    {
+        Marker::pinned_transition(self.state, args, self.callsite)
     }
 }
 
@@ -543,6 +846,50 @@ where
     }
 }
 
+/// Creates a callable transition that runs pinned implementation-side effects first.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_pinned_effect<Storage, T, S, Next, Effect>(
+    state: State<Storage, T, S>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> PinnedEffectTransitionCall<Storage, T, S, Next, Effect>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    T::Standin: Transition<S, Next>,
+    S: crate::StateTrait,
+    Next: crate::ConcreteStateTrait,
+{
+    PinnedEffectTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable pinned transition from a static union proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_static_union_pinned_proof<Storage, T, S, Marker, Next>(
+    state: State<Storage, T, S>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> PinnedStateUnionProofTransitionCall<Storage, T, S, Marker, Next>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: crate::StateTrait + StateUnionErased<Marker>,
+    Marker: StateUnionDiscriminant + crate::StateUnionSharedPinnedEffect<T, Next>,
+    Next: crate::ConcreteStateTrait,
+{
+    PinnedStateUnionProofTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
 /// Creates a callable transition from a union-membership proof.
 #[doc(hidden)]
 #[must_use]
@@ -572,13 +919,7 @@ where
 pub fn transition_state_with_concrete_proof<Storage, T, S, Marker, Next>(
     proven: StateConcreteProvenState<Storage, T, S, Marker, Next>,
     token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
-) -> EffectTransitionCall<
-    Storage,
-    T,
-    S,
-    Next,
-    <T as TransitionEffectSelector<S, Next>>::Effect,
->
+) -> EffectTransitionCall<Storage, T, S, Next, <T as TransitionEffectSelector<S, Next>>::Effect>
 where
     T: StateMachineImpl + TransitionEffectSelector<S, Next>,
     Storage: StateStorage,
@@ -597,13 +938,7 @@ where
 pub fn transition_state_with_concrete_transition_proof<Storage, T, S, Marker, Next>(
     proven: StateWithProof<Storage, T, S, StateConcreteTransitionProof<T, S, Marker, Next>>,
     token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
-) -> EffectTransitionCall<
-    Storage,
-    T,
-    S,
-    Next,
-    <T as TransitionEffectSelector<S, Next>>::Effect,
->
+) -> EffectTransitionCall<Storage, T, S, Next, <T as TransitionEffectSelector<S, Next>>::Effect>
 where
     T: StateMachineImpl + TransitionEffectSelector<S, Next>,
     Storage: StateStorage,
@@ -656,9 +991,7 @@ pub fn transition_state_with_static_union_proof<Storage, T, S, Marker, Next>(
 where
     T: StateMachineImpl,
     Storage: StateStorage,
-    S: crate::StateTrait
-        + StateUnionErased<Marker>
-        + crate::UnionTransitionProof<T, Marker, Next>,
+    S: crate::StateTrait + StateUnionErased<Marker> + crate::UnionTransitionProof<T, Marker, Next>,
     Marker: StateUnionDiscriminant + StateUnionSharedEffect<T, Next>,
     Next: crate::ConcreteStateTrait,
 {
@@ -700,7 +1033,12 @@ where
 #[must_use]
 #[track_caller]
 pub fn transition_state_with_concrete_kind_proof<Storage, T, S, Marker, Next, Kind>(
-    proven: StateWithProof<Storage, T, S, crate::TransitionProof<Storage, T, S, Marker, Next, Kind>>,
+    proven: StateWithProof<
+        Storage,
+        T,
+        S,
+        crate::TransitionProof<Storage, T, S, Marker, Next, Kind>,
+    >,
     _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
 ) -> ConcreteProofTransitionCall<Storage, T, S, Next>
 where
@@ -727,7 +1065,12 @@ where
 #[must_use]
 #[track_caller]
 pub fn transition_state_with_kind_proof<Storage, T, S, Marker, Next, Kind>(
-    proven: StateWithProof<Storage, T, S, crate::TransitionProof<Storage, T, S, Marker, Next, Kind>>,
+    proven: StateWithProof<
+        Storage,
+        T,
+        S,
+        crate::TransitionProof<Storage, T, S, Marker, Next, Kind>,
+    >,
     _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
 ) -> KindProofTransitionCall<Storage, T, S, Marker, Next, Kind>
 where
@@ -766,6 +1109,23 @@ where
     Storage::complete_transition_after_effect(state, callsite)
 }
 
+#[doc(hidden)]
+pub fn transition_concrete_after_pinned_effect<Storage, T, From, To, Args, Effect>(
+    mut state: State<Storage, T, From>,
+    args: Args,
+    callsite: TransitionCallsite,
+) -> State<Storage, T, To>
+where
+    T: StateMachineImpl,
+    Storage: SPinMut,
+    From: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
+    Effect: PinnedTransitionEffect<T, From, To, Args>,
+{
+    Effect::apply(Storage::s_pin_mut(&mut state.inner), args);
+    Storage::complete_transition_after_effect(state, callsite)
+}
+
 /// Creates a callable discriminated-union transition that runs the exact concrete effect.
 #[doc(hidden)]
 #[must_use]
@@ -781,6 +1141,27 @@ where
     Next: crate::StateTrait,
 {
     DiscriminatedTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable pinned discriminated-union transition that runs the exact concrete effect.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_discriminated_state_pinned<Storage, T, Marker, Next>(
+    state: DiscriminatedState<Storage, T, Marker>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> PinnedDiscriminatedTransitionCall<Storage, T, Marker, Next>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    Marker: StateUnionDiscriminant,
+    Next: crate::StateTrait,
+{
+    PinnedDiscriminatedTransitionCall {
         state,
         callsite: transition_callsite(),
         marker: PhantomData,
@@ -824,6 +1205,35 @@ where
     }
 }
 
+/// Borrows a state's runtime value through its storage's pin guarantee.
+///
+/// This is a free function rather than an inherent `State` method so generic
+/// state-machine APIs stay focused on receiver types and transitions. Use it
+/// when a method accepts `&State<S, T, Current>` and needs to call an API on
+/// `T` that requires `Pin<&T>`.
+#[must_use]
+pub fn pin_ref<Storage, T, S>(state: &State<Storage, T, S>) -> Pin<&T>
+where
+    T: StateMachineImpl,
+    Storage: SPinRef,
+{
+    Storage::s_pin_ref(&state.inner)
+}
+
+/// Mutably borrows a state's runtime value through its storage's pin guarantee.
+///
+/// Most pinned transitions should use `pinned transition` plus
+/// [`transition!(pin state, ...)`](macro@crate::transition) instead of calling
+/// this directly. It is provided for implementation methods that need to call
+/// additional pinned APIs before deciding whether to transition.
+pub fn pin_mut<Storage, T, S>(state: &mut State<Storage, T, S>) -> Pin<&mut T>
+where
+    T: StateMachineImpl,
+    Storage: SPinMut,
+{
+    Storage::s_pin_mut(&mut state.inner)
+}
+
 impl<Storage, T, S> State<Storage, T, S>
 where
     T: StateMachineImpl,
@@ -858,6 +1268,22 @@ where
     T: StateMachineImpl,
 {
     /// Wraps an implementation in an initial directly owned state.
+    ///
+    /// This is the normal entry point for a state machine. It only compiles
+    /// when the definition crate declared `S` as an initial state for
+    /// `T::Standin`.
+    ///
+    /// ```ignore
+    /// use magicstatemachines::{SOwned, State};
+    /// use test_def::states::Disconnected;
+    ///
+    /// let disconnected: State<SOwned, Connection, Disconnected> =
+    ///     State::new(Connection::new("localhost:8080"));
+    /// ```
+    ///
+    /// To move the state into another owned container later, create that
+    /// container from the returned state token instead of constructing raw
+    /// `T` again.
     #[must_use]
     pub fn new(value: T) -> Self
     where
@@ -875,6 +1301,14 @@ where
     T: StateMachineImpl,
 {
     /// Moves a directly owned state into `Box` storage without changing its state.
+    ///
+    /// This mirrors `Box::new`, but it takes `State<SOwned, T, S>` instead of
+    /// raw `T` so the current state is preserved:
+    ///
+    /// ```ignore
+    /// let owned: State<SOwned, Connection, Connected> = connection.connect();
+    /// let boxed: SBox<Connection, Connected> = SBox::new(owned);
+    /// ```
     #[must_use]
     pub fn new(state: State<StorageStateOwned, T, S>) -> Self {
         State {
@@ -889,6 +1323,15 @@ where
     }
 
     /// Moves this boxed state back into direct owned storage.
+    ///
+    /// This consumes the box and returns `State<SOwned, T, S>`. The state
+    /// marker is unchanged, so methods available before boxing remain
+    /// available after unboxing.
+    ///
+    /// ```ignore
+    /// let boxed: SBox<Connection, Connected> = SBox::new(owned);
+    /// let owned_again: State<SOwned, Connection, Connected> = SBox::unbox(boxed);
+    /// ```
     #[must_use]
     pub fn unbox(state: Self) -> State<StorageStateOwned, T, S> {
         State {
@@ -908,6 +1351,14 @@ where
     T: StateMachineImpl,
 {
     /// Pins an already boxed state in place without changing its state.
+    ///
+    /// Pinning must happen to the boxed allocation. For that reason this
+    /// constructor consumes [`SBox`] rather than `SOwned`:
+    ///
+    /// ```ignore
+    /// let boxed: SBox<Connection, Connected> = SBox::new(owned);
+    /// let pinned: SPinBox<Connection, Connected> = SPinBox::new(boxed);
+    /// ```
     #[must_use]
     pub fn new(state: State<StorageStateOwnedBox, T, S>) -> Self {
         State {
@@ -922,6 +1373,43 @@ where
     }
 
     /// Converts pinned box storage back to box storage when the runtime is `Unpin`.
+    ///
+    /// This is only available for `T: Unpin`; otherwise the pinning guarantee
+    /// must be preserved.
+    ///
+    /// ```compile_fail
+    /// use core::marker::PhantomPinned;
+    /// use magicstatemachines::{
+    ///     Initial, SBox, SOwned, SPinBox, State, StateMachineImpl, States,
+    /// };
+    ///
+    /// struct Machine;
+    /// struct Runtime {
+    ///     _pin: PhantomPinned,
+    /// }
+    /// struct Token;
+    ///
+    /// States! {
+    ///     Ready;
+    /// }
+    ///
+    /// impl Initial<Ready> for Machine {}
+    ///
+    /// impl StateMachineImpl for Runtime {
+    ///     type Standin = Machine;
+    ///     type Impl = Self;
+    ///     type TransitionToken = Token;
+    /// }
+    ///
+    /// let ready = State::<SOwned, _, Ready>::new(Runtime {
+    ///     _pin: PhantomPinned,
+    /// });
+    /// let pinned: SPinBox<Runtime, Ready> = SPinBox::new(SBox::new(ready));
+    ///
+    /// // `Runtime` is `!Unpin`, so the pinned allocation cannot be turned
+    /// // back into an ordinary box.
+    /// let _boxed = SPinBox::into_boxed(pinned);
+    /// ```
     #[must_use]
     pub fn into_boxed(state: Self) -> State<StorageStateOwnedBox, T, S>
     where
@@ -945,6 +1433,9 @@ where
     T: StateMachineImpl,
 {
     /// Moves a directly owned state into `UniqueRc` storage without changing its state.
+    ///
+    /// This API is available only with the `unique-rc-arc` feature because
+    /// `UniqueRc` itself is nightly-only.
     #[must_use]
     pub fn new(state: State<StorageStateOwned, T, S>) -> Self {
         State {
@@ -965,6 +1456,9 @@ where
     T: StateMachineImpl,
 {
     /// Moves a directly owned state into `UniqueArc` storage without changing its state.
+    ///
+    /// This API is available only with the `unique-rc-arc` feature because
+    /// `UniqueArc` itself is nightly-only.
     #[must_use]
     pub fn new(state: State<StorageStateOwned, T, S>) -> Self {
         State {

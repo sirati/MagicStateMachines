@@ -60,8 +60,10 @@ impl ConnectionAsync {
         S: SMut,
     {
         match user {
-            Some(user) => <Authenticated as In<Online>>::into_enum(self.authenticate(user).await),
-            None => <Connected as In<Online>>::into_enum(self),
+            Some(user) => {
+                <Authenticated as In<Online>>::into_discriminated(self.authenticate(user).await)
+            }
+            None => <Connected as In<Online>>::into_discriminated(self),
         }
     }
 
@@ -72,7 +74,7 @@ impl ConnectionAsync {
     where
         S: SRef,
     {
-        <_ as In<Online>>::into_enum(self)
+        <_ as In<Online>>::into_discriminated(self)
     }
 
     pub(crate) async fn disconnect<S>(

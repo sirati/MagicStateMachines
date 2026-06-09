@@ -58,8 +58,7 @@ where
     }
 }
 
-impl<Storage, T, From, Marker, To> DerefMut
-    for StateUnionProvenState<Storage, T, From, Marker, To>
+impl<Storage, T, From, Marker, To> DerefMut for StateUnionProvenState<Storage, T, From, Marker, To>
 where
     T: StateMachineImpl,
     Storage: SMut,
@@ -72,8 +71,7 @@ where
     }
 }
 
-impl<Storage, T, From, Marker, To> Deref
-    for StateConcreteProvenState<Storage, T, From, Marker, To>
+impl<Storage, T, From, Marker, To> Deref for StateConcreteProvenState<Storage, T, From, Marker, To>
 where
     T: StateMachineImpl,
     Storage: SRef,

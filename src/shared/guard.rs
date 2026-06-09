@@ -7,6 +7,21 @@ use crate::{
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
+/// Immutable shared-state read guard used as [`State`] storage.
+///
+/// This is the inner value for [`StorageStateRef`]. Public shared immutable
+/// borrows return `State<StorageStateRef<...>, T, S>`, not this type directly.
+/// The storage implements [`SRef`] but deliberately does not implement
+/// [`SMut`], so read-only arbitrary-self methods can run while generated
+/// transition calls cannot complete.
+///
+/// ```ignore
+/// let connected = shared.borrow::<Connected>()?;
+/// assert_eq!(connected.endpoint(), "localhost:8080"); // `self: &State<impl SRef, ...>`
+///
+/// // Union borrows work too; the runtime marker is checked against the union.
+/// let online = shared.borrow::<Online>()?;
+/// ```
 pub struct StateRef<G, T, S> {
     guard: G,
     marker: PhantomData<fn() -> (T, S)>,
@@ -39,6 +54,112 @@ where
     }
 }
 
+/// Generic [`State`] backend for an immutable shared-state guard.
+///
+/// This storage can expose `&T` through [`SRef`], but it cannot expose `&mut T`
+/// and therefore does not implement [`SMut`]. A `State<StorageStateRef<...>>`
+/// is useful for read-only methods such as
+/// `fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str`, but it
+/// cannot be transitioned by the generated [`transition!`](macro@crate::transition)
+/// macro.
+pub struct StorageStateRef<'a, Backend>(PhantomData<&'a Backend>);
+
+impl<'a, Backend> StateStorage for StorageStateRef<'a, Backend>
+where
+    Backend: SharedStorage + 'a,
+{
+    type Inference = InnerInference;
+
+    type Inner<T, S>
+        = StateRef<Backend::ReadGuard<'a, T>, T, S>
+    where
+        T: StateMachineImpl;
+    type Machine<T>
+        = T
+    where
+        T: StateMachineImpl;
+
+    fn retag<T, From, To>(inner: Self::Inner<T, From>) -> Self::Inner<T, To>
+    where
+        T: StateMachineImpl,
+    {
+        StateRef {
+            guard: inner.guard,
+            marker: PhantomData,
+        }
+    }
+
+    fn complete_transition<T, From, To, Args>(
+        _state: State<Self, T, From>,
+        _args: Args,
+        _callsite: TransitionCallsite,
+    ) -> State<Self, T, To>
+    where
+        T: StateMachineImpl,
+        From: StateTrait,
+        To: crate::ConcreteStateTrait,
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+    {
+        panic!("immutable shared-state views cannot transition")
+    }
+
+    fn complete_transition_after_effect<T, From, To>(
+        _state: State<Self, T, From>,
+        _callsite: TransitionCallsite,
+    ) -> State<Self, T, To>
+    where
+        T: StateMachineImpl,
+        From: StateTrait,
+        To: crate::ConcreteStateTrait,
+    {
+        panic!("immutable shared-state views cannot transition")
+    }
+
+    fn inferred_state<T, S>(inner: &Self::Inner<T, S>) -> ErasedState
+    where
+        T: StateMachineImpl,
+        S: StateTrait,
+    {
+        state_trait::clone_erased(&inner.guard.state)
+    }
+}
+
+impl<'a, Backend> SRef for StorageStateRef<'a, Backend>
+where
+    Backend: SharedStorage + 'a,
+{
+    fn s_ref<T, S>(inner: &Self::Inner<T, S>) -> &T
+    where
+        T: StateMachineImpl,
+    {
+        inner
+    }
+}
+
+/// Mutable typed view into shared state.
+///
+/// Transitions performed through this guard update an internal pending state.
+/// When the guard is dropped, that pending state is committed back to the
+/// shared container.
+///
+/// The returned guard is used through the generic [`State`] alias
+/// [`SMutView`](crate::SMutView), so implementation methods can keep the same
+/// `State<S, Self, Current>` receiver shape they use for owned values:
+///
+/// ```ignore
+/// {
+///     let connected = shared.borrow_mut::<Connected>()?;
+///     let authenticated = magicstatemachines::transition!(
+///         connected,
+///         "alice".to_owned(),
+///     );
+///     drop(authenticated); // shared state is now `Authenticated`
+/// }
+/// ```
+///
+/// The commit happens when the final guard state is dropped. Constructing a
+/// transition call object is not a commit by itself.
 pub struct StateMut<G, T, S>
 where
     G: DerefMut<Target = SharedValue<T>>,
@@ -171,7 +292,7 @@ where
 
 /// Creates a callable transition for a mutable shared-state guard.
 ///
-/// This is the guarded-state counterpart to [`crate::transition`].
+/// This is the guarded-state counterpart to [`crate::transition()`].
 #[must_use]
 pub fn transition_mut<G, T, S, Next>(
     state: StateMut<G, T, S>,
@@ -219,6 +340,8 @@ where
     }
 }
 
+/// Low-level transition call object for [`StateMut`].
+#[doc(hidden)]
 pub struct StateMutTransitionCall<G, T, From, To>
 where
     G: DerefMut<Target = SharedValue<T>>,
@@ -246,6 +369,8 @@ where
     }
 }
 
+/// State marker that can validate a shared-storage runtime marker.
+#[doc(hidden)]
 pub trait SharedBorrowState: StateTrait {
     fn ensure_state(actual: &ErasedState) -> Result<(), WrongStateError>;
     fn initial_pending(actual: &ErasedState) -> ErasedState;
