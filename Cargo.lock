@@ -14,7 +14,8 @@ dependencies = [
 [[package]]
 name = "dynzst"
 version = "0.1.0"
-source = "git+https://github.com/sirati/DynZSTBox.rs?rev=0d982f22e063f43000b99fc6f98d0819d5441044#0d982f22e063f43000b99fc6f98d0819d5441044"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90ce1de245be86944b6d2de3acea1d1e7a77466938aec80e916becd8094adecf"
 
 [[package]]
 name = "paste"

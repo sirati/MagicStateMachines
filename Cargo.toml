@@ -5,6 +5,16 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Zero-overhead typestate wrappers for compiler-enforced state machines"
 repository = "https://github.com/sirati/MagicStateMachines"
+homepage = "https://github.com/sirati/MagicStateMachines"
+documentation = "https://docs.rs/MagicStateMachines"
+readme = "README.md"
+exclude = [
+    ".direnv/",
+    ".envrc",
+    "devel.nix",
+    "flake.lock",
+    "flake.nix",
+]
 
 [features]
 default = []
@@ -24,7 +34,7 @@ license = "MIT OR Apache-2.0"
 version = "0.1.0"
 
 [workspace.dependencies]
-dynzst = { git = "https://github.com/sirati/DynZSTBox.rs", rev = "0d982f22e063f43000b99fc6f98d0819d5441044" }
+dynzst = "0.1.0"
 magicstatemachines = { path = ".", package = "MagicStateMachines" }
 test_def = { path = "test_def" }
 
