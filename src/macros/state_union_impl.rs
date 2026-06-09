@@ -11,6 +11,11 @@ macro_rules! __StateUnion {
 
             impl $crate::StateMarker for $marker {
                 type Kind = $crate::UnionStateKind;
+
+                fn erased_state() -> &'static dyn $crate::StateTrait {
+                    static STATE: $marker = $marker;
+                    &STATE
+                }
             }
 
             #[doc(hidden)]
@@ -186,6 +191,11 @@ macro_rules! __StateUnion {
 
             impl $crate::StateMarker for $marker {
                 type Kind = $crate::UnionStateKind;
+
+                fn erased_state() -> &'static dyn $crate::StateTrait {
+                    static STATE: $marker = $marker;
+                    &STATE
+                }
             }
 
             #[doc(hidden)]

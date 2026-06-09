@@ -1,12 +1,12 @@
-# statemachines
+# MagicStateMachines
 
-`statemachines` provides a transparent typestate wrapper for compiler-enforced
-state machines. The state-machine contract and its runtime implementation live
-in separate crates.
+MagicStateMachines provides a transparent typestate wrapper for
+compiler-enforced state machines. The state-machine contract and its runtime
+implementation live in separate crates.
 
 The workspace contains:
 
-- `statemachines`: the reusable `State<Storage, T, S>` wrapper
+- `MagicStateMachines` / `magicstatemachines`: the reusable `State<Storage, T, S>` wrapper
 - `test_def`: only the stand-in ZST, states, allowed transitions, and unions
 - `test_use`: the runtime type and all method implementations
 
@@ -43,11 +43,11 @@ The associated type defaults to `fn()`. The implementation macro generates the
 private transition capability and module-local `transition()` helpers:
 
 ```rust
-statemachines::StateMachineImpl!(Connection: ConnectionStandin);
+magicstatemachines::StateMachineImpl!(Connection: ConnectionStandin);
 ```
 
 Those helpers return a one-shot callable whose `FnOnce` implementation uses the
-`rust-call` ABI. The underlying public `statemachines::transition` and
+`rust-call` ABI. The underlying public `magicstatemachines::transition` and
 `transition_mut` functions require the generated token, whose constructor
 remains private to the implementation module. Safe caller code therefore
 cannot bypass the implementation's transition methods.
@@ -67,8 +67,14 @@ let (state, data) = connection.decompose();
 let connection = StateOwned::recompose(state, data)?;
 ```
 
-Both opaque values carry the same random `u64`. Recomposition rejects tokens
-from different decompositions.
+This API is behind the `decompose` feature. Both opaque values carry the same
+random `u64`, and recomposition rejects tokens from different decompositions.
+With both `decompose` and `nightly-random`, the UID uses nightly `std::random`
+and the `rnd` crate is not required. With `decompose-rnd`, the UID is generated
+through the `rnd` crate. Plain `decompose` without either random backend is a
+compile-time error because Cargo features cannot express "enable `rnd` unless
+`nightly-random` is enabled". When `decompose` is disabled, neither
+decomposition API nor UID generation is compiled.
 
 The project uses nightly Rust because arbitrary self types are unstable:
 
@@ -206,7 +212,11 @@ drop(connected);
 let connected = shared.borrow::<Connected>()?;
 ```
 
-Erased state markers are stored with the pinned `dynzst` dependency.
+Erased state markers are stored as `&'static dyn StateTrait` by default. Enable
+the `dynZST` feature to store them through the pinned `dynzst` dependency
+instead. In both modes, generated `StateMarker` impls provide the erased static
+ZST reference; the library does not manufacture state references with unsafe
+code.
 Alternative lock or cell families implement the non-generic `SharedStorage`
 trait using its `Storage<T>` GAT. Ownership and synchronization compose as
 `RcState<MyStorage, T>` or `ArcState<MyStorage, T>`; the storage marker itself
@@ -215,13 +225,12 @@ does not contain `T`.
 Enable transition tracing with:
 
 ```console
-cargo run -p test_use --features statemachines/tracing
+cargo run -p test_use --features magicstatemachines/tracing
 ```
 
-With tracing enabled, each `StateOwned` stores a `Vec<TraceEntry>`. Every entry owns
-the source and destination as `&'static dyn statemachines::tracing::State` and
-also stores the caller location. The sealed tracing trait is implemented only
-for ZSTs; references contain only the marker's trait-object metadata. The trace is
-preserved across decomposition and recomposition and is available through
+With tracing enabled, each `StateOwned` stores a `Vec<TraceEntry>`. Every entry
+stores the source and destination as erased `StateTrait` markers and also
+stores the caller location. The trace is preserved across decomposition and
+recomposition when `decompose` is also enabled and is available through
 `StateOwned::trace()`. Tracing adds runtime storage, and traced states cannot
 implement `Copy`.

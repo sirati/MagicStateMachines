@@ -1,5 +1,5 @@
 {
-  description = "Development environment for the statemachines Rust workspace";
+  description = "Development environment for the MagicStateMachines Rust workspace";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

@@ -13,8 +13,8 @@ use std::rc::UniqueRc;
 use std::sync::{TryLockError, UniqueArc};
 
 struct Machine;
-struct Ready;
 crate::States! {
+    Ready;
     Running;
 }
 
@@ -29,13 +29,16 @@ struct SharedRuntime {
 }
 
 struct MultiInitialMachine;
-struct FirstInitial;
-struct SecondInitial;
 struct MultiTargetMachine;
-struct MultiFromA;
-struct MultiFromB;
-struct MultiToA;
-struct MultiToB;
+
+crate::States! {
+    FirstInitial;
+    SecondInitial;
+    MultiFromA;
+    MultiFromB;
+    MultiToA;
+    MultiToB;
+}
 
 crate::StateMachineDefinition! {
     for MultiInitialMachine;
@@ -152,6 +155,7 @@ fn boxed_state_can_be_pinned_in_place() {
 }
 
 #[test]
+#[cfg(feature = "decompose")]
 fn matching_decomposed_parts_recompose() {
     let ready: StateOwned<_, Ready> = StateOwned::new(Runtime);
     let (state, data) = ready.decompose();
@@ -161,6 +165,7 @@ fn matching_decomposed_parts_recompose() {
 }
 
 #[test]
+#[cfg(feature = "decompose")]
 fn mismatched_decomposed_parts_do_not_recompose() {
     let first: StateOwned<_, Ready> = StateOwned::new(Runtime);
     let (first_state, _) = first.decompose();
@@ -358,7 +363,7 @@ fn tracing_records_transition_and_callsite() {
 }
 
 #[test]
-#[cfg(feature = "tracing")]
+#[cfg(all(feature = "tracing", feature = "decompose"))]
 fn decomposition_preserves_trace() {
     let ready: StateOwned<_, Ready> = StateOwned::new(Runtime);
     let running: StateOwned<_, Running> = transition(ready, TransitionToken)();

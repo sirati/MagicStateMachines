@@ -26,7 +26,7 @@ mod tests {
     use super::connectable::{Connectable, ConnectionViaTrait};
     use super::connection::Connection;
     use super::connection_async::ConnectionAsync;
-    use statemachines::In;
+    use magicstatemachines::In;
     use test_def::{Online, OnlineDiscriminator, OnlineEnum};
 
     fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
@@ -126,16 +126,16 @@ mod tests {
 
         assert_in_online::<test_def::states::Connected>();
         assert_in_online::<test_def::states::Authenticated>();
-        assert_in_online::<statemachines::StateUnionState<Online>>();
+        assert_in_online::<magicstatemachines::StateUnionState<Online>>();
     }
 
     #[test]
     fn online_enum_deref_carries_discriminator_in_storage() {
         fn expect_discriminated_storage(
-            _state: &statemachines::State<
-                statemachines::SDiscriminated<statemachines::SOwned, OnlineDiscriminator>,
+            _state: &magicstatemachines::State<
+                magicstatemachines::SDiscriminated<magicstatemachines::SOwned, OnlineDiscriminator>,
                 Connection,
-                statemachines::StateUnionState<Online>,
+                magicstatemachines::StateUnionState<Online>,
             >,
         ) {
         }

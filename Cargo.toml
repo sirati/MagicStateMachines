@@ -1,12 +1,17 @@
 [package]
-name = "statemachines"
+name = "MagicStateMachines"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Zero-overhead typestate wrappers for compiler-enforced state machines"
+repository = "https://github.com/sirati/MagicStateMachines"
 
 [features]
 default = []
+decompose = []
+decompose-rnd = ["decompose", "dep:rnd"]
+dynZST = ["dep:dynzst"]
+nightly-random = []
 tracing = []
 
 [workspace]
@@ -20,13 +25,14 @@ version = "0.1.0"
 
 [workspace.dependencies]
 dynzst = { git = "https://github.com/sirati/DynZSTBox.rs", rev = "0d982f22e063f43000b99fc6f98d0819d5441044" }
-statemachines = { path = "." }
+magicstatemachines = { path = ".", package = "MagicStateMachines" }
 test_def = { path = "test_def" }
 
 [dependencies]
-dynzst.workspace = true
+dynzst = { workspace = true, optional = true }
 paste = "1.0.15"
+rnd = { version = "0.1.1", optional = true }
 
 [lib]
+name = "magicstatemachines"
 path = "src/lib.rs"
-

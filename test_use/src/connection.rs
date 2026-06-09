@@ -1,4 +1,4 @@
-use statemachines::{DiscriminatedState, In, SMut, SOwned, SRef, SResult, State};
+use magicstatemachines::{DiscriminatedState, In, SMut, SOwned, SRef, SResult, State, StateMachineImpl};
 use test_def::{
     AllMarker, ConnectionStandin, InOnline, Online,
     states::{Authenticated, Connected, Disconnected},
@@ -11,7 +11,7 @@ pub(crate) struct Connection {
     user: Option<String>,
 }
 
-statemachines::StateMachineImpl! {
+StateMachineImpl! {
     Connection: ConnectionStandin;
 
     transition Disconnected => Connected();

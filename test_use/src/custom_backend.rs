@@ -1,5 +1,5 @@
 use crate::connection::Connection;
-use statemachines::{SArc, SharedStorage, SharedValue, StateUnionState};
+use magicstatemachines::{SArc, SharedStorage, SharedValue, StateUnionState};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 use test_def::{
     Online,

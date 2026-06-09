@@ -1,14 +1,16 @@
 #![feature(negative_impls)]
 #![forbid(unsafe_code)]
 
-use statemachines::{StateClone, StateCopy, StateMachineDefinition};
+use magicstatemachines::{StateClone, StateCopy, StateMachineDefinition};
 
 /// ZST identifying this state-machine contract.
 pub struct ConnectionStandin;
 
 /// States owned by the definition crate.
 pub mod states {
-    statemachines::States! {
+    use magicstatemachines::States;
+    
+    States! {
         Disconnected;
         Connected;
         Authenticated;
@@ -34,7 +36,7 @@ StateMachineDefinition! {
     transition Connected => Disconnected();
     transition Authenticated => Connected | Disconnected();
 
-    union DisconnectedMarker: Disconnected;
+    union DisconnectedMarker: AllMarker, Disconnected;
     union AllMarker: Disconnected | Connected | Authenticated;
     union Online: AllMarker, Connected | Authenticated;
 }

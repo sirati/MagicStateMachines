@@ -6,5 +6,5 @@ license.workspace = true
 publish = false
 
 [dependencies]
-statemachines.workspace = true
+magicstatemachines.workspace = true
 test_def.workspace = true

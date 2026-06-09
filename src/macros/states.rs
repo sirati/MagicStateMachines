@@ -7,6 +7,11 @@ macro_rules! States {
 
             impl $crate::StateMarker for $state {
                 type Kind = $crate::ConcreteStateKind;
+
+                fn erased_state() -> &'static dyn $crate::StateTrait {
+                    static STATE: $state = $state;
+                    &STATE
+                }
             }
         )*
     };

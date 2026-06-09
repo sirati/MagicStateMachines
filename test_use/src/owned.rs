@@ -1,5 +1,5 @@
 use crate::connection::Connection;
-use statemachines::SBox;
+use magicstatemachines::SBox;
 use test_def::OnlineEnum;
 
 pub(crate) fn run() {

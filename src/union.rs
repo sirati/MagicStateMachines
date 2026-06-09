@@ -10,6 +10,14 @@ use core::ops::Deref;
 #[doc(hidden)]
 pub struct StateUnionState<Marker>(PhantomData<fn() -> Marker>);
 
+impl<Marker> StateUnionState<Marker> {
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
 /// Implemented by concrete states that can still identify their enum variant.
 #[doc(hidden)]
 pub auto trait StateUnionConcreteState {}

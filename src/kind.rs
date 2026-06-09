@@ -9,8 +9,7 @@ pub trait StateKind: Sized {
     where
         T: StateMachineImpl,
         From: StateTrait + StateMarker<Kind = Self>,
-        Marker: StateUnionDiscriminant
-            + StateMarker<Kind = UnionStateKind>,
+        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
         To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
 
     #[doc(hidden)]
@@ -31,38 +30,45 @@ pub trait StateKind: Sized {
 pub struct ConcreteStateKind;
 
 impl StateKind for ConcreteStateKind {
-    type Proof<T, From, Marker, To> = crate::StateConcreteTransitionProof<T, From, Marker, To>
+    type Proof<T, From, Marker, To>
+        = crate::StateConcreteTransitionProof<T, From, Marker, To>
     where
         T: StateMachineImpl,
         From: StateTrait + StateMarker<Kind = Self>,
-        Marker: StateUnionDiscriminant
-            + StateMarker<Kind = UnionStateKind>,
+        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
         To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
-
 }
 
 /// Marker kind for generated union state ZSTs.
 pub struct UnionStateKind;
 
 impl StateKind for UnionStateKind {
-    type Proof<T, From, Marker, To> = StateUnionTransitionProof<T, From, Marker, To>
+    type Proof<T, From, Marker, To>
+        = StateUnionTransitionProof<T, From, Marker, To>
     where
         T: StateMachineImpl,
         From: StateTrait + StateMarker<Kind = Self>,
-        Marker: StateUnionDiscriminant
-            + StateMarker<Kind = UnionStateKind>,
+        Marker: StateUnionDiscriminant + StateMarker<Kind = UnionStateKind>,
         To: StateTrait + StateMarker<Kind = ConcreteStateKind>;
-
 }
 
 /// Common trait implemented by concrete states and generated union markers.
-pub trait StateMarker {
+pub trait StateMarker: 'static {
     type Kind: StateKind;
+
+    #[doc(hidden)]
+    fn erased_state() -> &'static dyn StateTrait
+    where
+        Self: Sized;
 }
 
 impl<Marker> StateMarker for StateUnionState<Marker>
 where
-    Marker: StateUnionDiscriminant,
+    Marker: StateUnionDiscriminant + 'static,
 {
     type Kind = UnionStateKind;
+
+    fn erased_state() -> &'static dyn StateTrait {
+        Box::leak(Box::new(StateUnionState::<Marker>::new()))
+    }
 }

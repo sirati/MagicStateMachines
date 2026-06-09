@@ -12,7 +12,7 @@
 /// Generated marker traits are sealed and cannot be implemented downstream:
 ///
 /// ```compile_fail
-/// use statemachines::StateUnion;
+/// use magicstatemachines::StateUnion;
 ///
 /// struct Connected;
 /// struct Other;
@@ -25,7 +25,7 @@
 /// target and function signature:
 ///
 /// ```compile_fail
-/// use statemachines::{StateUnion, StateUnionState, Transition};
+/// use magicstatemachines::{StateUnion, StateUnionState, Transition};
 ///
 /// struct Machine;
 /// struct Connected;

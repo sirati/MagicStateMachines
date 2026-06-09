@@ -1,21 +1,20 @@
+#![cfg_attr(feature = "nightly-random", feature(random))]
 #![feature(
     arbitrary_self_types,
     associated_type_defaults,
     auto_traits,
     fn_traits,
-    generic_const_exprs,
     negative_impls,
-    random,
     tuple_trait,
     unboxed_closures,
     unique_rc_arc
 )]
-#![allow(incomplete_features)]
 #![deny(unsafe_code)]
 
 //! Zero-overhead wrappers for externally defined typestate contracts.
 
 mod contract;
+#[cfg(feature = "decompose")]
 mod decomposed;
 mod kind;
 mod macros;
@@ -23,13 +22,13 @@ mod policy;
 mod proof;
 mod shared;
 mod state;
-#[allow(unsafe_code)]
 mod state_trait;
 #[cfg(feature = "tracing")]
 pub mod tracing;
 mod union;
 
 pub use contract::{Initial, StateMachineImpl, Transition};
+#[cfg(feature = "decompose")]
 pub use decomposed::{DecomposedData, DecomposedState, RecomposeError};
 pub use kind::{ConcreteStateKind, StateKind, StateMarker, UnionStateKind};
 pub use policy::{StateClone, StateCopy};

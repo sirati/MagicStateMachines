@@ -23,7 +23,7 @@ pub trait Transition<TFrom, TTo> {
 /// transition capability's construction private:
 ///
 /// ```compile_fail
-/// use statemachines::{Initial, State, StateMachineImpl, StorageStateOwned, Transition};
+/// use magicstatemachines::{Initial, State, StateMachineImpl, StorageStateOwned, Transition};
 ///
 /// mod implementation {
 ///     use super::*;
@@ -35,7 +35,7 @@ pub trait Transition<TFrom, TTo> {
 ///     impl Initial<Ready> for Machine {}
 ///     impl Transition<Ready, Running> for Machine {}
 ///
-///     statemachines::StateMachineImpl!(Runtime: Machine);
+///     magicstatemachines::StateMachineImpl!(Runtime: Machine);
 ///
 ///     pub fn ready() -> State<StorageStateOwned, Runtime, Ready> {
 ///         State::new(Runtime)
@@ -43,7 +43,7 @@ pub trait Transition<TFrom, TTo> {
 /// }
 ///
 /// let ready = implementation::ready();
-/// let _ = statemachines::transition_state::<_, _, _, implementation::Running>(
+/// let _ = magicstatemachines::transition_state::<_, _, _, implementation::Running>(
 ///     ready,
 ///     implementation::__StateMachineTransitionToken(())
 /// )();
@@ -52,7 +52,7 @@ pub trait Transition<TFrom, TTo> {
 /// The generated ergonomic method is private to the invocation module:
 ///
 /// ```compile_fail
-/// use statemachines::{Initial, State, StorageStateOwned, Transition};
+/// use magicstatemachines::{Initial, State, StorageStateOwned, Transition};
 ///
 /// mod implementation {
 ///     use super::*;
@@ -64,7 +64,7 @@ pub trait Transition<TFrom, TTo> {
 ///
 ///     impl Initial<Ready> for Machine {}
 ///     impl Transition<Ready, Running> for Machine {}
-///     statemachines::StateMachineImpl!(Runtime: Machine);
+///     magicstatemachines::StateMachineImpl!(Runtime: Machine);
 ///
 ///     pub fn ready() -> State<StorageStateOwned, Runtime, Ready> {
 ///         State::new(Runtime)

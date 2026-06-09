@@ -1,9 +1,8 @@
 #[cfg(not(feature = "tracing"))]
 use crate::StateCopy;
-use crate::{
-    DecomposedData, DecomposedState, Initial, RecomposeError, StateClone, StateMachineImpl,
-    Transition,
-};
+#[cfg(feature = "decompose")]
+use crate::{DecomposedData, DecomposedState, RecomposeError};
+use crate::{Initial, StateClone, StateMachineImpl, Transition};
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "tracing")]
@@ -19,7 +18,7 @@ use core::pin::Pin;
 ///
 /// ```compile_fail
 /// use std::rc::Rc;
-/// use statemachines::{Initial, StateMachineImpl, StateOwned};
+/// use magicstatemachines::{Initial, StateMachineImpl, StateOwned};
 ///
 /// struct Machine;
 /// struct Ready;
@@ -122,9 +121,10 @@ impl<T, S> StateOwned<T, S> {
     /// Separates the compile-time state token from the runtime data.
     ///
     /// The generated UID binds the two returned values together.
+    #[cfg(feature = "decompose")]
     #[must_use]
     pub fn decompose(self) -> (DecomposedState<S>, DecomposedData<T>) {
-        let uid = std::random::random(..);
+        let uid = decompose_uid();
 
         (
             DecomposedState {
@@ -141,6 +141,7 @@ impl<T, S> StateOwned<T, S> {
     }
 
     /// Recombines state and data produced by the same [`StateOwned::decompose`] call.
+    #[cfg(feature = "decompose")]
     pub fn recompose(
         state: DecomposedState<S>,
         data: DecomposedData<T>,
@@ -164,6 +165,29 @@ impl<T, S> StateOwned<T, S> {
         &self.trace
     }
 }
+
+#[cfg(all(feature = "decompose", feature = "nightly-random"))]
+fn decompose_uid() -> u64 {
+    std::random::random(..)
+}
+
+#[cfg(all(
+    feature = "decompose",
+    not(feature = "nightly-random"),
+    feature = "decompose-rnd"
+))]
+fn decompose_uid() -> u64 {
+    rnd::random::<u64>()
+}
+
+#[cfg(all(
+    feature = "decompose",
+    not(feature = "nightly-random"),
+    not(feature = "decompose-rnd")
+))]
+compile_error!(
+    "feature `decompose` requires a random backend: enable `nightly-random` or `decompose-rnd`"
+);
 
 impl<T, S> StateOwned<T, S>
 where

@@ -1,4 +1,4 @@
-use statemachines::{DiscriminatedState, In, SMut, SOwned, SRef, State, StateMachineImpl};
+use magicstatemachines::{DiscriminatedState, In, SMut, SOwned, SRef, State, StateMachineImpl};
 use test_def::{
     ConnectionStandin, Online,
     states::{Authenticated, Connected, Disconnected},
@@ -75,7 +75,7 @@ pub(crate) struct ConnectionViaTrait {
     user: Option<String>,
 }
 
-statemachines::StateMachineImpl! {
+magicstatemachines::StateMachineImpl! {
     ConnectionViaTrait: ConnectionStandin;
 
     transition Disconnected => Connected();
