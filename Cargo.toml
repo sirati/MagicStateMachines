@@ -14,6 +14,8 @@ exclude = [
     "devel.nix",
     "flake.lock",
     "flake.nix",
+    "test_def/",
+    "test_use/",
 ]
 
 [features]
