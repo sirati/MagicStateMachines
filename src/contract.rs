@@ -1,5 +1,7 @@
 use core::pin::Pin;
+#[cfg(feature = "unique-rc-arc")]
 use std::rc::UniqueRc;
+#[cfg(feature = "unique-rc-arc")]
 use std::sync::UniqueArc;
 
 /// Declares that a definition crate permits `TState` as an initial state.
@@ -12,6 +14,35 @@ pub trait Initial<TState> {}
 pub trait Transition<TFrom, TTo> {
     /// Function signature required to perform this transition.
     type F = fn();
+}
+
+/// Stable proof that a transition signature accepts a tuple of arguments.
+#[doc(hidden)]
+pub trait TransitionSignature<Args> {}
+
+impl TransitionSignature<()> for fn() {}
+
+macro_rules! transition_signature_impls {
+    ($(($($arg:ident),+)),* $(,)?) => {
+        $(
+            impl<$($arg),+> TransitionSignature<($($arg,)+)> for fn($($arg),+) {}
+        )*
+    };
+}
+
+transition_signature_impls! {
+    (A),
+    (A, B),
+    (A, B, C),
+    (A, B, C, D),
+    (A, B, C, D, E),
+    (A, B, C, D, E, F),
+    (A, B, C, D, E, F, G),
+    (A, B, C, D, E, F, G, H),
+    (A, B, C, D, E, F, G, H, I),
+    (A, B, C, D, E, F, G, H, I, J),
+    (A, B, C, D, E, F, G, H, I, J, K),
+    (A, B, C, D, E, F, G, H, I, J, K, L),
 }
 
 /// Connects an implementation type to a state-machine definition.
@@ -97,6 +128,7 @@ where
     type TransitionToken = T::TransitionToken;
 }
 
+#[cfg(feature = "unique-rc-arc")]
 impl<T> StateMachineImpl for UniqueRc<T>
 where
     T: StateMachineImpl + ?Sized,
@@ -106,6 +138,7 @@ where
     type TransitionToken = T::TransitionToken;
 }
 
+#[cfg(feature = "unique-rc-arc")]
 impl<T> StateMachineImpl for UniqueArc<T>
 where
     T: StateMachineImpl + ?Sized,

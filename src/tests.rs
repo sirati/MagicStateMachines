@@ -1,16 +1,20 @@
 use crate::{
     Initial, SArcMutex, SBox, SMove, SOwned, SPinBox, SRcRefCell, SharedStateError, State,
     StateCopy, StateMachineImpl, StateOwned, StorageStateOwnedBox,
-    StorageStateOwnedPinBox, StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc, Transition,
-    transition, transition_state,
+    StorageStateOwnedPinBox, Transition, transition, transition_state,
 };
+#[cfg(feature = "unique-rc-arc")]
+use crate::{StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc};
 use core::marker::PhantomData;
 #[cfg(not(feature = "tracing"))]
 use core::mem::{align_of, size_of};
 use core::pin::Pin;
 use std::cell::BorrowError;
+#[cfg(feature = "unique-rc-arc")]
 use std::rc::UniqueRc;
-use std::sync::{TryLockError, UniqueArc};
+use std::sync::TryLockError;
+#[cfg(feature = "unique-rc-arc")]
+use std::sync::UniqueArc;
 
 struct Machine;
 crate::States! {
@@ -96,7 +100,7 @@ fn state_marker_has_no_layout_cost() {
 #[test]
 fn declared_transition_changes_only_the_type() {
     let ready: StateOwned<_, Ready> = StateOwned::new(Runtime);
-    let running: StateOwned<_, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<_, Running> = transition(ready, TransitionToken).call(());
 
     #[cfg(not(feature = "tracing"))]
     assert_eq!(size_of_val(&running), 0);
@@ -110,29 +114,36 @@ fn generic_state_preserves_storage_across_transitions() {
     assert_move_storage::<SOwned>();
     assert_move_storage::<StorageStateOwnedBox>();
     assert_move_storage::<StorageStateOwnedPinBox>();
+    #[cfg(feature = "unique-rc-arc")]
     assert_move_storage::<StorageStateOwnedUniqueRc>();
+    #[cfg(feature = "unique-rc-arc")]
     assert_move_storage::<StorageStateOwnedUniqueArc>();
 
     let ready = State::<SOwned, _, Ready>::new(Runtime);
-    let _: State<SOwned, Runtime, Running> = transition_state(ready, TransitionToken)();
+    let _: State<SOwned, Runtime, Running> = transition_state(ready, TransitionToken).call(());
 
     let ready = SBox::new(State::<SOwned, _, Ready>::new(Runtime));
     let _: State<StorageStateOwnedBox, Runtime, Running> =
-        transition_state(ready, TransitionToken)();
+        transition_state(ready, TransitionToken).call(());
 
     let ready = SPinBox::new(SBox::new(State::<SOwned, _, Ready>::new(Runtime)));
     let _: State<StorageStateOwnedPinBox, Runtime, Running> =
-        transition_state(ready, TransitionToken)();
+        transition_state(ready, TransitionToken).call(());
 
-    let ready =
-        State::<StorageStateOwnedUniqueRc, _, Ready>::new(State::<SOwned, _, Ready>::new(Runtime));
-    let _: State<StorageStateOwnedUniqueRc, Runtime, Running> =
-        transition_state(ready, TransitionToken)();
+    #[cfg(feature = "unique-rc-arc")]
+    {
+        let ready = State::<StorageStateOwnedUniqueRc, _, Ready>::new(
+            State::<SOwned, _, Ready>::new(Runtime),
+        );
+        let _: State<StorageStateOwnedUniqueRc, Runtime, Running> =
+            transition_state(ready, TransitionToken).call(());
 
-    let ready =
-        State::<StorageStateOwnedUniqueArc, _, Ready>::new(State::<SOwned, _, Ready>::new(Runtime));
-    let _: State<StorageStateOwnedUniqueArc, Runtime, Running> =
-        transition_state(ready, TransitionToken)();
+        let ready = State::<StorageStateOwnedUniqueArc, _, Ready>::new(
+            State::<SOwned, _, Ready>::new(Runtime),
+        );
+        let _: State<StorageStateOwnedUniqueArc, Runtime, Running> =
+            transition_state(ready, TransitionToken).call(());
+    }
 }
 
 #[test]
@@ -140,7 +151,7 @@ fn owned_state_can_change_box_container() {
     let ready = State::<SOwned, _, Ready>::new(Runtime);
     let boxed: SBox<Runtime, Ready> = SBox::new(ready);
     let running: State<StorageStateOwnedBox, Runtime, Running> =
-        transition_state(boxed, TransitionToken)();
+        transition_state(boxed, TransitionToken).call(());
     let _running: State<SOwned, Runtime, Running> = SBox::unbox(running);
 }
 
@@ -149,7 +160,7 @@ fn boxed_state_can_be_pinned_in_place() {
     let ready = SBox::new(State::<SOwned, _, Ready>::new(Runtime));
     let pinned: SPinBox<Runtime, Ready> = SPinBox::new(ready);
     let running: State<StorageStateOwnedPinBox, Runtime, Running> =
-        transition_state(pinned, TransitionToken)();
+        transition_state(pinned, TransitionToken).call(());
     let boxed: SBox<Runtime, Running> = SPinBox::into_boxed(running);
     let _running: State<SOwned, Runtime, Running> = SBox::unbox(boxed);
 }
@@ -184,7 +195,7 @@ fn mismatched_decomposed_parts_do_not_recompose() {
 #[test]
 fn boxed_implementation_uses_the_same_contract() {
     let ready: StateOwned<Box<Runtime>, Ready> = StateOwned::new(Box::new(Runtime));
-    let running: StateOwned<Box<Runtime>, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<Box<Runtime>, Running> = transition(ready, TransitionToken).call(());
 
     #[cfg(not(feature = "tracing"))]
     assert_eq!(size_of_val(&running), size_of::<Box<Runtime>>());
@@ -195,7 +206,7 @@ fn boxed_implementation_uses_the_same_contract() {
 #[test]
 fn pinned_box_uses_the_same_contract() {
     let ready: StateOwned<Pin<Box<Runtime>>, Ready> = StateOwned::new(Box::pin(Runtime));
-    let running: StateOwned<Pin<Box<Runtime>>, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<Pin<Box<Runtime>>, Running> = transition(ready, TransitionToken).call(());
 
     #[cfg(not(feature = "tracing"))]
     assert_eq!(size_of_val(&running), size_of::<Pin<Box<Runtime>>>());
@@ -204,9 +215,10 @@ fn pinned_box_uses_the_same_contract() {
 }
 
 #[test]
+#[cfg(feature = "unique-rc-arc")]
 fn unique_rc_uses_the_same_contract() {
     let ready: StateOwned<UniqueRc<Runtime>, Ready> = StateOwned::new(UniqueRc::new(Runtime));
-    let running: StateOwned<UniqueRc<Runtime>, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<UniqueRc<Runtime>, Running> = transition(ready, TransitionToken).call(());
 
     #[cfg(not(feature = "tracing"))]
     assert_eq!(size_of_val(&running), size_of::<UniqueRc<Runtime>>());
@@ -215,9 +227,10 @@ fn unique_rc_uses_the_same_contract() {
 }
 
 #[test]
+#[cfg(feature = "unique-rc-arc")]
 fn unique_arc_uses_the_same_contract() {
     let ready: StateOwned<UniqueArc<Runtime>, Ready> = StateOwned::new(UniqueArc::new(Runtime));
-    let running: StateOwned<UniqueArc<Runtime>, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<UniqueArc<Runtime>, Running> = transition(ready, TransitionToken).call(());
 
     #[cfg(not(feature = "tracing"))]
     assert_eq!(size_of_val(&running), size_of::<UniqueArc<Runtime>>());
@@ -231,8 +244,8 @@ fn copying_state_copies_the_runtime_value() {
     let first: StateOwned<Runtime, Ready> = StateOwned::new(Runtime);
     let second = first;
 
-    let _: StateOwned<Runtime, Running> = transition(first, TransitionToken)();
-    let _: StateOwned<Runtime, Running> = transition(second, TransitionToken)();
+    let _: StateOwned<Runtime, Running> = transition(first, TransitionToken).call(());
+    let _: StateOwned<Runtime, Running> = transition(second, TransitionToken).call(());
 }
 
 #[test]
@@ -267,7 +280,7 @@ fn rc_state_guard_commits_transition_on_drop() {
 
     let mut guard = state.borrow_mut::<Ready>().expect("initial state");
     guard.value = 2;
-    let mut guard = transition_state::<_, _, _, Running>(guard, TransitionToken)();
+    let mut guard = transition_state::<_, _, _, Running>(guard, TransitionToken).call(());
     guard.value = 3;
 
     match alias.borrow::<Ready>() {
@@ -308,7 +321,7 @@ fn rc_state_borrows_committed_state_through_erased_union() {
     let alias = state.clone();
 
     let guard = state.borrow_mut::<Ready>().expect("initial state");
-    let guard = transition_state::<_, _, _, Running>(guard, TransitionToken)();
+    let guard = transition_state::<_, _, _, Running>(guard, TransitionToken).call(());
     drop(guard);
 
     {
@@ -334,7 +347,7 @@ fn arc_state_guard_commits_transition_on_drop() {
     let alias = state.clone();
 
     let guard = state.borrow_mut::<Ready>().expect("initial state");
-    let mut guard = transition_state::<_, _, _, Running>(guard, TransitionToken)();
+    let mut guard = transition_state::<_, _, _, Running>(guard, TransitionToken).call(());
     guard.value = 5;
     drop(guard);
 
@@ -383,7 +396,7 @@ fn mutex_state_reports_native_error_when_already_borrowed() {
 fn tracing_records_transition_and_callsite() {
     let ready: StateOwned<_, Ready> = StateOwned::new(Runtime);
     let expected_line = line!() + 1;
-    let running: StateOwned<_, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<_, Running> = transition(ready, TransitionToken).call(());
     let entry = &running.trace()[0];
 
     assert!(entry.from().type_name().ends_with("::Ready"));
@@ -396,7 +409,7 @@ fn tracing_records_transition_and_callsite() {
 #[cfg(all(feature = "tracing", feature = "decompose"))]
 fn decomposition_preserves_trace() {
     let ready: StateOwned<_, Ready> = StateOwned::new(Runtime);
-    let running: StateOwned<_, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<_, Running> = transition(ready, TransitionToken).call(());
     let (state, data) = running.decompose();
     let running = StateOwned::recompose(state, data).expect("matching provenance");
 
@@ -407,7 +420,7 @@ fn decomposition_preserves_trace() {
 #[cfg(feature = "tracing")]
 fn cloning_state_clones_erased_markers() {
     let ready: StateOwned<_, Ready> = StateOwned::new(Runtime);
-    let running: StateOwned<_, Running> = transition(ready, TransitionToken)();
+    let running: StateOwned<_, Running> = transition(ready, TransitionToken).call(());
     let cloned = running.clone();
 
     assert!(cloned.trace()[0].from().type_name().ends_with("::Ready"));
@@ -466,8 +479,8 @@ mod transition_effect_syntax {
     #[test]
     fn semicolon_transition_has_empty_body() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
-        let connected = ready.transition()();
-        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+        let connected = crate::transition!(ready);
+        let authenticated: State<SOwned, _, Authenticated> = crate::transition!(connected);
 
         assert_eq!(authenticated.value, 1);
     }
@@ -475,14 +488,14 @@ mod transition_effect_syntax {
     #[test]
     fn comma_terminated_transition_shares_next_body() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
-        let connected = ready.transition()();
-        let ready: State<SOwned, _, Ready> = connected.transition()();
+        let connected = crate::transition!(ready);
+        let ready: State<SOwned, _, Ready> = crate::transition!(connected);
 
         assert_eq!(ready.value, 10);
 
-        let connected = ready.transition()();
-        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
-        let ready: State<SOwned, _, Ready> = authenticated.transition()();
+        let connected = crate::transition!(ready);
+        let authenticated: State<SOwned, _, Authenticated> = crate::transition!(connected);
+        let ready: State<SOwned, _, Ready> = crate::transition!(authenticated);
 
         assert_eq!(ready.value, 21);
     }
@@ -490,11 +503,11 @@ mod transition_effect_syntax {
     #[test]
     fn erased_union_transition_runs_concrete_body_with_normal_transition() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
-        let connected = ready.transition()();
-        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+        let connected = crate::transition!(ready);
+        let authenticated: State<SOwned, _, Authenticated> = crate::transition!(connected);
         let online = <Authenticated as crate::In<Online>>::into_enum(authenticated);
         let ready: State<SOwned, _, Ready> =
-            crate::undiscriminate_state(online.transitionExp2(Online)());
+            crate::undiscriminate_state(crate::transition!(dyn Online, online));
 
         assert_eq!(ready.value, 11);
     }
@@ -502,9 +515,9 @@ mod transition_effect_syntax {
     #[test]
     fn union_proof_transition_infers_proof_from_receiver_and_target() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
-        let connected = ready.transition()();
-        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
-        let ready: State<SOwned, _, Ready> = authenticated.transitionExp2(Online)();
+        let connected = crate::transition!(ready);
+        let authenticated: State<SOwned, _, Authenticated> = crate::transition!(connected);
+        let ready: State<SOwned, _, Ready> = crate::transition!(const Online authenticated);
 
         assert_eq!(ready.value, 11);
     }
@@ -512,18 +525,21 @@ mod transition_effect_syntax {
     #[test]
     fn discriminated_union_transition_runs_exact_body_when_bodies_differ() {
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
-        let connected = ready.transition()();
+        let connected = crate::transition!(ready);
         let stopped: State<SOwned, _, Stopped> =
-            <Connected as crate::In<Online>>::into_enum(connected).transition_discriminated()();
+            <Connected as crate::In<Online>>::into_enum(connected)
+                ._magicsm_transition_discriminated()
+                .call(());
 
         assert_eq!(stopped.value, 2);
 
         let ready = State::<SOwned, _, Ready>::new(Runtime { value: 0 });
-        let connected = ready.transition()();
-        let authenticated: State<SOwned, _, Authenticated> = connected.transition()();
+        let connected = crate::transition!(ready);
+        let authenticated: State<SOwned, _, Authenticated> = crate::transition!(connected);
         let stopped: State<SOwned, _, Stopped> =
             <Authenticated as crate::In<Online>>::into_enum(authenticated)
-                .transition_discriminated()();
+                ._magicsm_transition_discriminated()
+                .call(());
 
         assert_eq!(stopped.value, 21);
     }

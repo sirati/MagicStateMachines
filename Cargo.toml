@@ -25,6 +25,7 @@ decompose-rnd = ["decompose", "dep:rnd"]
 dynZST = ["dep:dynzst"]
 nightly-random = []
 tracing = []
+unique-rc-arc = []
 
 [workspace]
 members = ["test_def", "test_use"]

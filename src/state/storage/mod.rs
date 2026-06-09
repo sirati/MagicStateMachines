@@ -13,13 +13,14 @@ use core::ops::{Deref, DerefMut};
 #[cfg(feature = "tracing")]
 use core::panic::Location;
 use core::pin::Pin;
+#[cfg(feature = "unique-rc-arc")]
 use std::rc::UniqueRc;
+#[cfg(feature = "unique-rc-arc")]
 use std::sync::UniqueArc;
 
-pub use owned::{
-    SOwned, StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox,
-    StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc,
-};
+pub use owned::{SOwned, StorageStateOwned, StorageStateOwnedBox, StorageStateOwnedPinBox};
+#[cfg(feature = "unique-rc-arc")]
+pub use owned::{StorageStateOwnedUniqueArc, StorageStateOwnedUniqueRc};
 
 pub type SBox<T, S> = State<StorageStateOwnedBox, T, S>;
 pub type SPinBox<T, S> = State<StorageStateOwnedPinBox, T, S>;
@@ -174,8 +175,7 @@ pub trait StateStorage: Sized {
         From: crate::StateTrait,
         To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple;
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>;
 
     #[doc(hidden)]
     fn complete_transition_after_effect<T, From, To>(
@@ -352,19 +352,18 @@ pub fn transition_callsite() -> TransitionCallsite {
     {}
 }
 
-impl<Storage, T, From, To, Args> FnOnce<Args> for StateTransitionCall<Storage, T, From, To>
+impl<Storage, T, From, To> StateTransitionCall<Storage, T, From, To>
 where
     T: StateMachineImpl,
     Storage: StateStorage,
-    T::Standin: Transition<From, To>,
-    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-    Args: core::marker::Tuple,
-    From: crate::StateTrait,
-    To: crate::ConcreteStateTrait,
 {
-    type Output = State<Storage, T, To>;
-
-    extern "rust-call" fn call_once(self, args: Args) -> Self::Output {
+    pub fn call<Args>(self, args: Args) -> State<Storage, T, To>
+    where
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        From: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
+    {
         Storage::complete_transition(self.state, args, {
             #[cfg(feature = "tracing")]
             {
@@ -376,121 +375,126 @@ where
     }
 }
 
-impl<Storage, T, From, To, Args, Effect> FnOnce<Args>
-    for EffectTransitionCall<Storage, T, From, To, Effect>
+impl<Storage, T, From, To, Effect> EffectTransitionCall<Storage, T, From, To, Effect>
 where
     T: StateMachineImpl,
-    Storage: SMut,
-    T::Standin: Transition<From, To>,
-    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-    Args: core::marker::Tuple,
-    From: crate::StateTrait,
-    To: crate::ConcreteStateTrait,
-    Effect: TransitionEffect<T, From, To, Args>,
+    Storage: StateStorage,
 {
-    type Output = State<Storage, T, To>;
-
-    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+    pub fn call<Args>(mut self, args: Args) -> State<Storage, T, To>
+    where
+        Storage: SMut,
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        From: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
+        Effect: TransitionEffect<T, From, To, Args>,
+    {
         Effect::apply(Storage::s_mut(&mut self.state.inner), args);
         Storage::complete_transition_after_effect(self.state, self.callsite)
     }
 }
 
-impl<Storage, T, From, To, Args> FnOnce<Args>
-    for ConcreteProofTransitionCall<Storage, T, From, To>
-where
-    T: StateMachineImpl + TransitionEffectSelector<From, To>,
-    Storage: SMut,
-    T::Standin: Transition<From, To>,
-    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-    Args: core::marker::Tuple,
-    From: crate::StateTrait,
-    To: crate::ConcreteStateTrait,
-    <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
-{
-    type Output = State<Storage, T, To>;
-
-    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
-        <T as TransitionEffectSelector<From, To>>::Effect::apply(
-            Storage::s_mut(&mut self.state.inner),
-            args,
-        );
-        Storage::complete_transition_after_effect(self.state, self.callsite)
-    }
-}
-
-impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
-    for KindProofTransitionCall<Storage, T, From, Marker, To, ConcreteStateKind>
-where
-    T: StateMachineImpl + TransitionEffectSelector<From, To>,
-    Storage: SMut,
-    T::Standin: Transition<From, To>,
-    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-    Args: core::marker::Tuple,
-    From: crate::ConcreteStateTrait,
-    Marker: crate::StateMarker,
-    To: crate::ConcreteStateTrait,
-    <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
-{
-    type Output = State<Storage, T, To>;
-
-    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
-        <T as TransitionEffectSelector<From, To>>::Effect::apply(
-            Storage::s_mut(&mut self.state.inner),
-            args,
-        );
-        Storage::complete_transition_after_effect(self.state, self.callsite)
-    }
-}
-
-impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
-    for KindProofTransitionCall<Storage, T, From, Marker, To, UnionStateKind>
+impl<Storage, T, From, To> ConcreteProofTransitionCall<Storage, T, From, To>
 where
     T: StateMachineImpl,
-    Storage: SMut,
-    From: crate::StateTrait + crate::In<Marker>,
-    Marker: StateUnionDiscriminant + StateUnionDiscriminatedTransition<T, To, Args>,
-    Args: core::marker::Tuple,
-    To: crate::ConcreteStateTrait,
+    Storage: StateStorage,
 {
-    type Output = State<Storage, T, To>;
+    pub fn call<Args>(mut self, args: Args) -> State<Storage, T, To>
+    where
+        T: TransitionEffectSelector<From, To>,
+        Storage: SMut,
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        From: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
+        <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
+    {
+        <T as TransitionEffectSelector<From, To>>::Effect::apply(
+            Storage::s_mut(&mut self.state.inner),
+            args,
+        );
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
 
-    extern "rust-call" fn call_once(self, args: Args) -> Self::Output {
+impl<Storage, T, From, Marker, To> KindProofTransitionCall<Storage, T, From, Marker, To, ConcreteStateKind>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    From: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
+    Marker: crate::StateMarker,
+{
+    pub fn call<Args>(mut self, args: Args) -> State<Storage, T, To>
+    where
+        T: TransitionEffectSelector<From, To>,
+        Storage: SMut,
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        From: crate::ConcreteStateTrait,
+        To: crate::ConcreteStateTrait,
+        <T as TransitionEffectSelector<From, To>>::Effect: TransitionEffect<T, From, To, Args>,
+    {
+        <T as TransitionEffectSelector<From, To>>::Effect::apply(
+            Storage::s_mut(&mut self.state.inner),
+            args,
+        );
+        Storage::complete_transition_after_effect(self.state, self.callsite)
+    }
+}
+
+impl<Storage, T, From, Marker, To> KindProofTransitionCall<Storage, T, From, Marker, To, UnionStateKind>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    From: crate::StateTrait,
+    To: crate::ConcreteStateTrait,
+    Marker: StateUnionDiscriminant,
+{
+    pub fn call<Args>(self, args: Args) -> State<Storage, T, To>
+    where
+        Storage: SMut,
+        From: crate::StateTrait + crate::In<Marker>,
+        Marker: StateUnionDiscriminatedTransition<T, To, Args>,
+        To: crate::ConcreteStateTrait,
+    {
         let state = <From as crate::In<Marker>>::into_enum(self.state);
         Marker::transition(state, args, self.callsite)
     }
 }
 
-impl<Storage, T, From, Marker, To, Args> FnOnce<Args>
-    for StateUnionProofTransitionCall<Storage, T, From, Marker, To>
+impl<Storage, T, From, Marker, To> StateUnionProofTransitionCall<Storage, T, From, Marker, To>
 where
     T: StateMachineImpl,
-    Storage: SMut,
-    From: StateUnionErased<Marker>,
-    Marker: StateUnionSharedTransitionEffect<T, To, Args>,
-    Args: core::marker::Tuple,
+    Storage: StateStorage,
+    From: crate::StateTrait,
     To: crate::ConcreteStateTrait,
+    Marker: StateUnionDiscriminant,
 {
-    type Output = State<Storage, T, To>;
-
-    extern "rust-call" fn call_once(mut self, args: Args) -> Self::Output {
+    pub fn call<Args>(mut self, args: Args) -> State<Storage, T, To>
+    where
+        Storage: SMut,
+        From: StateUnionErased<Marker>,
+        Marker: StateUnionSharedTransitionEffect<T, To, Args>,
+        To: crate::ConcreteStateTrait,
+    {
         Marker::apply(Storage::s_mut(&mut self.state.inner), args);
         Storage::complete_transition_after_effect(self.state, self.callsite)
     }
 }
 
-impl<Storage, T, Marker, To, Args> FnOnce<Args>
-    for DiscriminatedTransitionCall<Storage, T, Marker, To>
+impl<Storage, T, Marker, To> DiscriminatedTransitionCall<Storage, T, Marker, To>
 where
     T: StateMachineImpl,
-    Storage: SMut,
-    Marker: StateUnionDiscriminatedTransition<T, To, Args>,
-    Args: core::marker::Tuple,
-    To: crate::ConcreteStateTrait,
+    Storage: StateStorage,
+    Marker: StateUnionDiscriminant,
 {
-    type Output = State<Storage, T, To>;
-
-    extern "rust-call" fn call_once(self, args: Args) -> Self::Output {
+    pub fn call<Args>(self, args: Args) -> State<Storage, T, To>
+    where
+        Storage: SMut,
+        Marker: StateUnionDiscriminatedTransition<T, To, Args>,
+        To: crate::ConcreteStateTrait,
+    {
         Marker::transition(self.state, args, self.callsite)
     }
 }
@@ -634,6 +638,30 @@ where
         state,
         proof: _proof,
     } = proven;
+    StateUnionProofTransitionCall {
+        state,
+        callsite: transition_callsite(),
+        marker: PhantomData,
+    }
+}
+
+/// Creates a callable static union transition from a shared-body proof.
+#[doc(hidden)]
+#[must_use]
+#[track_caller]
+pub fn transition_state_with_static_union_proof<Storage, T, S, Marker, Next>(
+    state: State<Storage, T, S>,
+    _token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
+) -> StateUnionProofTransitionCall<Storage, T, S, Marker, Next>
+where
+    T: StateMachineImpl,
+    Storage: StateStorage,
+    S: crate::StateTrait
+        + StateUnionErased<Marker>
+        + crate::UnionTransitionProof<T, Marker, Next>,
+    Marker: StateUnionDiscriminant + StateUnionSharedEffect<T, Next>,
+    Next: crate::ConcreteStateTrait,
+{
     StateUnionProofTransitionCall {
         state,
         callsite: transition_callsite(),
@@ -911,6 +939,7 @@ where
     }
 }
 
+#[cfg(feature = "unique-rc-arc")]
 impl<T, S> State<StorageStateOwnedUniqueRc, T, S>
 where
     T: StateMachineImpl,
@@ -930,6 +959,7 @@ where
     }
 }
 
+#[cfg(feature = "unique-rc-arc")]
 impl<T, S> State<StorageStateOwnedUniqueArc, T, S>
 where
     T: StateMachineImpl,

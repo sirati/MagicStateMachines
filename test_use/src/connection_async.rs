@@ -1,6 +1,6 @@
-use magicstatemachines::{DiscriminatedState, In, SMut, SOwned, SRef, State};
+use magicstatemachines::{DiscriminatedState, In, SMut, SOwned, SRef, State, transition};
 use test_def::{
-    ConnectionStandin, Online,
+    ConnectionStandin, InOnline, Online,
     states::{Authenticated, Connected, Disconnected},
 };
 
@@ -39,7 +39,7 @@ impl ConnectionAsync {
     where
         S: SMut,
     {
-        self.transition()()
+        transition!(self)
     }
 
     pub(crate) async fn authenticate<S>(
@@ -49,7 +49,7 @@ impl ConnectionAsync {
     where
         S: SMut,
     {
-        self.transition()(user.into())
+        transition!(self, user.into())
     }
 
     pub(crate) async fn authenticate_if<S>(
@@ -76,19 +76,19 @@ impl ConnectionAsync {
     }
 
     pub(crate) async fn disconnect<S>(
-        self: State<S, Self, impl In<Online>>,
+        self: State<S, Self, impl InOnline>,
     ) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
-        self.transitionExp2(Online)()
+        transition!(const Online self)
     }
 
     pub(crate) async fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
     where
         S: SMut,
     {
-        self.transition()()
+        transition!(self)
     }
 
     pub(crate) fn endpoint(self: &State<impl SRef, Self, impl In<Online>>) -> &str {

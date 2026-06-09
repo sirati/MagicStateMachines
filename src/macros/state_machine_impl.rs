@@ -12,7 +12,7 @@
 ///     where
 ///         Storage: SRef,
 ///     {
-///         self.transition()()
+///         magicstatemachines::transition!(self)
 ///     }
 /// }
 /// ```
@@ -76,7 +76,7 @@ macro_rules! StateMachineImpl {
         {
             #[must_use]
             #[track_caller]
-            fn transition<To>(
+            fn _magicsm_transition<To>(
                 self,
             ) -> $crate::EffectTransitionCall<
                 Storage,
@@ -105,7 +105,7 @@ macro_rules! StateMachineImpl {
                 >,
         {
             #[track_caller]
-            fn transition<To>(
+            fn _magicsm_transition<To>(
                 self,
             ) -> $crate::EffectTransitionCall<
                 Storage,
@@ -126,14 +126,14 @@ macro_rules! StateMachineImpl {
 
         }
 
-        #[allow(dead_code)]
+        #[allow(dead_code, non_snake_case)]
         trait __GenericStateMarkerTransitionExt<Storage, From>
         where
             Storage: $crate::StateStorage,
         {
             #[allow(non_snake_case)]
             #[track_caller]
-            fn transitionExp2<Marker, To>(
+            fn _magicsm_transitionDyn<Marker, To>(
                 self,
                 _marker: Marker,
             ) -> $crate::KindProofTransitionCall<
@@ -162,7 +162,7 @@ macro_rules! StateMachineImpl {
         {
             #[allow(non_snake_case)]
             #[track_caller]
-            fn transitionExp2<Marker, To>(
+            fn _magicsm_transitionDyn<Marker, To>(
                 self,
                 _marker: Marker,
             ) -> $crate::KindProofTransitionCall<
@@ -193,43 +193,35 @@ macro_rules! StateMachineImpl {
 
         }
 
-        #[allow(dead_code)]
-        trait __GenericStateWithProofTransitionExt<Storage, From, Marker, To, Kind>
+        #[allow(dead_code, non_snake_case)]
+        trait __GenericStateMarkerStaticTransitionExt<Storage, From>
         where
             Storage: $crate::StateStorage,
-            From: $crate::StateTrait,
-            Marker: $crate::StateMarker,
-            To: $crate::ConcreteStateTrait,
-            Kind: $crate::StateKind,
         {
+            #[allow(non_snake_case)]
             #[track_caller]
-            fn proven_transition(
+            fn _magicsm_transitionConst<Marker, To>(
                 self,
-            ) -> $crate::KindProofTransitionCall<
-                Storage,
-                $implementation,
-                From,
-                Marker,
-                To,
-                Kind,
-            >;
+                _marker: Marker,
+            ) -> $crate::StateUnionProofTransitionCall<Storage, $implementation, From, Marker, To>
+            where
+                From: $crate::StateTrait
+                    + $crate::In<Marker>
+                    + $crate::StateUnionErased<Marker>
+                    + $crate::UnionTransitionProof<$implementation, Marker, To>,
+                Marker: $crate::StateUnionDiscriminant
+                    + $crate::StateUnionTransition<$standin, To>
+                    + $crate::StateUnionSharedEffect<$implementation, To>,
+                To: $crate::ConcreteStateTrait,
+                $standin: $crate::Transition<
+                    $crate::StateUnionState<Marker>,
+                    To,
+                    F = <Marker as $crate::StateUnionTransition<$standin, To>>::F,
+                >;
         }
 
-        impl<Storage, From, Marker, To, Kind>
-            __GenericStateWithProofTransitionExt<Storage, From, Marker, To, Kind>
-            for $crate::StateWithProof<
-                Storage,
-                $implementation,
-                From,
-                $crate::TransitionProof<
-                    Storage,
-                    $implementation,
-                    From,
-                    Marker,
-                    To,
-                    Kind,
-                >,
-            >
+        impl<Storage, From> __GenericStateMarkerStaticTransitionExt<Storage, From>
+            for $crate::State<Storage, $implementation, From>
         where
             Storage: $crate::StateStorage,
             Storage::Machine<$implementation>: $crate::StateMachineImpl<
@@ -237,31 +229,38 @@ macro_rules! StateMachineImpl {
                     Impl = $implementation,
                     TransitionToken = __StateMachineTransitionToken,
                 >,
-            From: $crate::StateTrait,
-            Marker: $crate::StateMarker,
-            To: $crate::ConcreteStateTrait,
-            Kind: $crate::StateKind,
         {
+            #[allow(non_snake_case)]
             #[track_caller]
-            fn proven_transition(
+            fn _magicsm_transitionConst<Marker, To>(
                 self,
-            ) -> $crate::KindProofTransitionCall<
-                Storage,
-                $implementation,
-                From,
-                Marker,
-                To,
-                Kind,
-            >
+                _marker: Marker,
+            ) -> $crate::StateUnionProofTransitionCall<Storage, $implementation, From, Marker, To>
+            where
+                From: $crate::StateTrait
+                    + $crate::In<Marker>
+                    + $crate::StateUnionErased<Marker>
+                    + $crate::UnionTransitionProof<$implementation, Marker, To>,
+                Marker: $crate::StateUnionDiscriminant
+                    + $crate::StateUnionTransition<$standin, To>
+                    + $crate::StateUnionSharedEffect<$implementation, To>,
+                To: $crate::ConcreteStateTrait,
+                $standin: $crate::Transition<
+                    $crate::StateUnionState<Marker>,
+                    To,
+                    F = <Marker as $crate::StateUnionTransition<$standin, To>>::F,
+                >,
             {
-                $crate::transition_state_with_kind_proof::<
+                $crate::transition_state_with_static_union_proof::<
                     Storage,
                     $implementation,
                     From,
                     Marker,
                     To,
-                    Kind,
-                >(self, __StateMachineTransitionToken(()))
+                >(
+                    self,
+                    __StateMachineTransitionToken(()),
+                )
             }
 
         }
@@ -272,7 +271,7 @@ macro_rules! StateMachineImpl {
             Storage: $crate::StateStorage,
         {
             #[track_caller]
-            fn transition(
+            fn _magicsm_transition(
                 self,
             ) -> $crate::EffectTransitionCall<
                 Storage,
@@ -316,7 +315,7 @@ macro_rules! StateMachineImpl {
             To: $crate::ConcreteStateTrait,
         {
             #[track_caller]
-            fn transition(
+            fn _magicsm_transition(
                 self,
             ) -> $crate::EffectTransitionCall<
                 Storage,
@@ -384,7 +383,7 @@ macro_rules! StateMachineImpl {
         {
             #[must_use]
             #[track_caller]
-            fn transition_discriminated<To>(
+            fn _magicsm_transition_discriminated<To>(
                 self,
             ) -> $crate::DiscriminatedTransitionCall<
                 Storage,
@@ -408,7 +407,7 @@ macro_rules! StateMachineImpl {
                 >,
         {
             #[track_caller]
-            fn transition_discriminated<To>(
+            fn _magicsm_transition_discriminated<To>(
                 self,
             ) -> $crate::DiscriminatedTransitionCall<
                 Storage,
@@ -433,13 +432,14 @@ macro_rules! StateMachineImpl {
             type TransitionToken = __StateMachineTransitionToken;
         }
 
+        #[allow(non_snake_case)]
         trait __StateTransitionExt<T, From>
         where
             T: $crate::StateMachineImpl,
         {
             #[must_use]
             #[track_caller]
-            fn transition<To>(self) -> $crate::TransitionCall<T, From, To>
+            fn _magicsm_transition<To>(self) -> $crate::TransitionCall<T, From, To>
             where
                 T::Standin: $crate::Transition<From, To>;
         }
@@ -453,7 +453,7 @@ macro_rules! StateMachineImpl {
                 >,
         {
             #[track_caller]
-            fn transition<To>(self) -> $crate::TransitionCall<T, From, To>
+            fn _magicsm_transition<To>(self) -> $crate::TransitionCall<T, From, To>
             where
                 T::Standin: $crate::Transition<From, To>,
             {
@@ -461,6 +461,7 @@ macro_rules! StateMachineImpl {
             }
         }
 
+        #[allow(non_snake_case)]
         trait __GenericStateTransitionExt<Storage, T, From>
         where
             T: $crate::StateMachineImpl,
@@ -469,7 +470,7 @@ macro_rules! StateMachineImpl {
         {
             #[must_use]
             #[track_caller]
-            fn transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
+            fn _magicsm_transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
             where
                 From: $crate::StateTrait,
                 To: $crate::ConcreteStateTrait,
@@ -488,7 +489,7 @@ macro_rules! StateMachineImpl {
                 >,
         {
             #[track_caller]
-            fn transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
+            fn _magicsm_transition<To>(self) -> $crate::StateTransitionCall<Storage, T, From, To>
             where
                 From: $crate::StateTrait,
                 To: $crate::ConcreteStateTrait,
@@ -498,13 +499,14 @@ macro_rules! StateMachineImpl {
             }
         }
 
+        #[allow(non_snake_case)]
         trait __StateMutTransitionExt<G, T, From>
         where
             G: ::core::ops::DerefMut<Target = $crate::SharedValue<T>>,
             T: $crate::StateMachineImpl,
         {
             #[must_use]
-            fn transition<To>(self) -> $crate::StateMutTransitionCall<G, T, From, To>
+            fn _magicsm_transition<To>(self) -> $crate::StateMutTransitionCall<G, T, From, To>
             where
                 T::Standin: $crate::Transition<From, To>;
         }
@@ -518,7 +520,7 @@ macro_rules! StateMachineImpl {
                     TransitionToken = __StateMachineTransitionToken,
                 >,
         {
-            fn transition<To>(self) -> $crate::StateMutTransitionCall<G, T, From, To>
+            fn _magicsm_transition<To>(self) -> $crate::StateMutTransitionCall<G, T, From, To>
             where
                 T::Standin: $crate::Transition<From, To>,
             {

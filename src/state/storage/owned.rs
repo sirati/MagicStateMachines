@@ -3,7 +3,9 @@ use crate::state::owned::{StateOwned, complete_transition};
 use crate::{Initial, StateMachineImpl, Transition};
 use core::marker::PhantomData;
 use core::pin::Pin;
+#[cfg(feature = "unique-rc-arc")]
 use std::rc::UniqueRc;
+#[cfg(feature = "unique-rc-arc")]
 use std::sync::UniqueArc;
 
 /// Backend for directly owned values.
@@ -18,9 +20,11 @@ pub struct StorageStateOwnedBox;
 pub struct StorageStateOwnedPinBox;
 
 /// Backend for `UniqueRc<T>` owned values.
+#[cfg(feature = "unique-rc-arc")]
 pub struct StorageStateOwnedUniqueRc;
 
 /// Backend for `UniqueArc<T>` owned values.
+#[cfg(feature = "unique-rc-arc")]
 pub struct StorageStateOwnedUniqueArc;
 
 impl StateStorage for StorageStateOwned {
@@ -50,8 +54,7 @@ impl StateStorage for StorageStateOwned {
         From: crate::StateTrait,
         To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
     {
         State {
             inner: complete_transition(state.inner, callsite),
@@ -134,8 +137,7 @@ macro_rules! indirect_owned_storage {
                 From: crate::StateTrait,
                 To: crate::ConcreteStateTrait,
                 T::Standin: Transition<From, To>,
-                <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-                Args: core::marker::Tuple,
+                <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
             {
                 State {
                     inner: complete_transition(state.inner, callsite),
@@ -192,7 +194,9 @@ macro_rules! indirect_owned_storage {
 }
 
 indirect_owned_storage!(StorageStateOwnedBox, Box);
+#[cfg(feature = "unique-rc-arc")]
 indirect_owned_storage!(StorageStateOwnedUniqueRc, UniqueRc);
+#[cfg(feature = "unique-rc-arc")]
 indirect_owned_storage!(StorageStateOwnedUniqueArc, UniqueArc);
 
 impl StateStorage for StorageStateOwnedPinBox {
@@ -222,8 +226,7 @@ impl StateStorage for StorageStateOwnedPinBox {
         From: crate::StateTrait,
         To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
     {
         State {
             inner: complete_transition(state.inner, callsite),

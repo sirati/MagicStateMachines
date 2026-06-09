@@ -87,8 +87,7 @@ where
         From: StateTrait,
         To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
     {
         State {
             inner: StateMut {
@@ -228,18 +227,17 @@ where
     to: PhantomData<fn() -> To>,
 }
 
-impl<G, T, From, To, Args> FnOnce<Args> for StateMutTransitionCall<G, T, From, To>
+impl<G, T, From, To> StateMutTransitionCall<G, T, From, To>
 where
     G: DerefMut<Target = SharedValue<T>>,
-    T: StateMachineImpl,
-    T::Standin: Transition<From, To>,
-    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-    Args: core::marker::Tuple,
-    To: crate::ConcreteStateTrait,
 {
-    type Output = StateMut<G, T, To>;
-
-    extern "rust-call" fn call_once(mut self, _args: Args) -> Self::Output {
+    pub fn call<Args>(mut self, _args: Args) -> StateMut<G, T, To>
+    where
+        T: StateMachineImpl,
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        To: crate::ConcreteStateTrait,
+    {
         StateMut {
             guard: self.state.guard.take(),
             pending: state_trait::erased_state::<To>(),

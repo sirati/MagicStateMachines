@@ -4,3 +4,4 @@ mod state_union;
 mod state_union_enum;
 mod state_union_impl;
 mod states;
+mod transition;

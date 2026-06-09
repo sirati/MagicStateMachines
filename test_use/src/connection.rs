@@ -1,5 +1,5 @@
 use magicstatemachines::{
-    DiscriminatedState, In, SMut, SOwned, SRef, SResult, State, StateMachineImpl,
+    DiscriminatedState, In, SMut, SOwned, SRef, SResult, State, StateMachineImpl, transition,
 };
 use test_def::{
     AllMarker, ConnectionStandin, InOnline, Online,
@@ -50,7 +50,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transition()()
+        transition!(self)
     }
 
     pub(crate) fn try_connect<S>(
@@ -75,8 +75,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transitionExp2(Connected)(user.into())
-        //self.transition()(user.into())
+        transition!(dyn Connected self, user.into())
     }
 
     #[must_use]
@@ -111,8 +110,8 @@ impl Connection {
         S: SMut,
     {
         match <_>::into_enum(self).discriminate() {
-            test_def::OnlineEnum::Connected(x) => x.transition()(),
-            test_def::OnlineEnum::Authenticated(x) => x.transition()(),
+            test_def::OnlineEnum::Connected(x) => transition!(x),
+            test_def::OnlineEnum::Authenticated(x) => transition!(x),
         }
     }
 
@@ -121,7 +120,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.transitionExp2(Online)()
+        transition!(dyn Online self,)
     }
 
     #[must_use]
@@ -129,9 +128,7 @@ impl Connection {
     where
         S: SMut,
     {
-        self.with(In::<Authenticated>::prove()).proven_transition()() //this works
-        //self.with(<Authenticated>::prove()).proven_transition()() //this does not work
-        //self.with(<_>::prove()).proven_transition()() //this does not work either
+        transition!(self)
     }
 
     pub(crate) fn endpoint(self: &State<impl SRef, Self, impl InOnline>) -> &str {

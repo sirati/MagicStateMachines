@@ -76,16 +76,15 @@ where
 }
 
 #[cfg(not(feature = "tracing"))]
-impl<T, From, To, Args> FnOnce<Args> for TransitionCall<T, From, To>
+impl<T, From, To> TransitionCall<T, From, To>
 where
     T: StateMachineImpl,
-    T::Standin: Transition<From, To>,
-    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-    Args: core::marker::Tuple,
 {
-    type Output = StateOwned<T, To>;
-
-    extern "rust-call" fn call_once(self, _args: Args) -> Self::Output {
+    pub fn call<Args>(self, _args: Args) -> StateOwned<T, To>
+    where
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+    {
         StateOwned {
             value: self.state.value,
             state: PhantomData,
@@ -94,18 +93,17 @@ where
 }
 
 #[cfg(feature = "tracing")]
-impl<T, From, To, Args> FnOnce<Args> for TransitionCall<T, From, To>
+impl<T, From, To> TransitionCall<T, From, To>
 where
     T: StateMachineImpl,
-    T::Standin: Transition<From, To>,
-    <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-    Args: core::marker::Tuple,
-    From: crate::StateTrait,
-    To: crate::ConcreteStateTrait,
 {
-    type Output = StateOwned<T, To>;
-
-    extern "rust-call" fn call_once(self, _args: Args) -> Self::Output {
+    pub fn call<Args>(self, _args: Args) -> StateOwned<T, To>
+    where
+        T::Standin: Transition<From, To>,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        From: crate::StateTrait,
+        To: crate::ConcreteStateTrait,
+    {
         let mut trace = self.state.trace;
         trace.push(crate::TraceEntry::new::<From, To>(self.callsite));
 

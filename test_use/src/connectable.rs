@@ -1,4 +1,6 @@
-use magicstatemachines::{DiscriminatedState, In, SMut, SOwned, SRef, State, StateMachineImpl};
+use magicstatemachines::{
+    DiscriminatedState, In, SMut, SOwned, SRef, State, StateMachineImpl, transition,
+};
 use test_def::{
     ConnectionStandin, Online,
     states::{Authenticated, Connected, Disconnected},
@@ -59,7 +61,7 @@ pub(crate) trait Connectable:
     where
         S: SRef,
     {
-        <_ as In<Online>>::into_enum(self)
+        <_>::into_enum(self)
     }
 
     fn endpoint(self: &State<impl SRef, Self, impl In<Online>>) -> &str;
@@ -102,7 +104,7 @@ impl Connectable for ConnectionViaTrait {
     where
         S: SMut,
     {
-        self.transition()()
+        transition!(self)
     }
 
     fn authenticate<S>(
@@ -112,21 +114,21 @@ impl Connectable for ConnectionViaTrait {
     where
         S: SMut,
     {
-        self.transition()(user.into())
+        transition!(self, user.into())
     }
 
     fn disconnect<S>(self: State<S, Self, impl In<Online>>) -> State<S, Self, Disconnected>
     where
         S: SMut,
     {
-        self.transitionExp2(Online)()
+        transition!(dyn Online self)
     }
 
     fn logout<S>(self: State<S, Self, Authenticated>) -> State<S, Self, Connected>
     where
         S: SMut,
     {
-        self.transition()()
+        transition!(self)
     }
 
     fn endpoint(self: &State<impl SRef, Self, impl In<Online>>) -> &str {

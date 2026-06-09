@@ -22,20 +22,6 @@ where
         state: State<Storage, T, From>,
         token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
     ) -> Self::Call;
-
-    fn proven_transition(
-        proven: StateWithProof<Storage, T, From, Self>,
-        token: <Storage::Machine<T> as StateMachineImpl>::TransitionToken,
-    ) -> Self::Call
-    where
-        Self: Sized,
-    {
-        let StateWithProof {
-            state,
-            proof: _proof,
-        } = proven;
-        Self::proven_transition_state(state, token)
-    }
 }
 
 impl<Storage, T, From, Marker, To> StateProofTransition<Storage, T, From, Marker, To>

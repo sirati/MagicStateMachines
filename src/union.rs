@@ -259,8 +259,7 @@ where
         From: StateTrait,
         To: crate::ConcreteStateTrait,
         T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: FnOnce<Args, Output = ()>,
-        Args: core::marker::Tuple,
+        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
     {
         let state = State::<Storage, T, From>::from_inner(state.inner.inner);
         let state = Storage::complete_transition(state, args, callsite);
