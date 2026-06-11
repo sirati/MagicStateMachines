@@ -4,6 +4,8 @@ use test_def::{
     states::{Authenticated, Connected, Disconnected},
 };
 
+use crate::connection::Connection;
+
 /// A second implementation of the same definition-crate state-machine contract.
 #[derive(Debug)]
 pub(crate) struct ConnectionAsync {
@@ -13,6 +15,8 @@ pub(crate) struct ConnectionAsync {
 
 magicstatemachines::StateMachineImpl! {
     ConnectionAsync: ConnectionStandin;
+
+    priv Initial: Authenticated;
 
     transition Disconnected => Connected();
 
@@ -33,6 +37,18 @@ impl ConnectionAsync {
             endpoint: endpoint.into(),
             user: None,
         })
+    }
+
+    #[must_use]
+    pub(crate) fn from_authenticated_connection(
+        source: State<SOwned, Connection, Authenticated>,
+    ) -> State<SOwned, Self, Authenticated> {
+        let source = State::into_concrete(source).into_raw();
+        let (endpoint, user) = source.into_parts();
+        State::from_concrete(Self::with_state_priv::<Authenticated>(Self {
+            endpoint,
+            user,
+        }))
     }
 
     pub(crate) async fn connect<S>(self: State<S, Self, Disconnected>) -> State<S, Self, Connected>

@@ -3,33 +3,39 @@
 
 use magicstatemachines::{StateClone, StateCopy, StateMachineDefinition};
 
-/// ZST identifying this state-machine contract.
-pub struct ConnectionStandin;
-
 /// States owned by the definition crate.
 pub mod states {
     use magicstatemachines::States;
 
     States! {
+        /// this is a doc string
         Disconnected;
         Connected;
         Authenticated;
+        Authorised;
+        Dispatched;
+        Done;
+        Failed;
+        Invalid;
     }
 }
 
-use states::{Authenticated, Connected, Disconnected};
+use states::*;
 
 // Connected values may be cloned but not implicitly copied. Authenticated
 // values are linear and cannot be cloned or copied.
 impl !StateCopy for Connected {}
 impl !StateClone for Authenticated {}
 
+/// ZST identifying this state-machine contract.
+pub struct ConnectionStandin;
+
 // This is the complete set of legal transitions. An implementation crate
 // cannot add more because both the stand-in and states are foreign to it.
 StateMachineDefinition! {
     for ConnectionStandin;
 
-    Initial: Disconnected;
+    pub Initial: Disconnected;
 
     transition Disconnected => Connected();
     transition Connected => Authenticated(user: String);
@@ -39,6 +45,19 @@ StateMachineDefinition! {
     union DisconnectedMarker: AllMarker, Disconnected;
     union AllMarker: Disconnected | Connected | Authenticated;
     union Online: AllMarker, Connected | Authenticated;
+}
+
+pub struct JobStandin;
+StateMachineDefinition! {
+    for JobStandin;
+
+    transition Authenticated => Authorised | Failed();
+    transition Authorised => Dispatched | Failed();
+    transition Dispatched => Done | Failed();
+    transition Done | Failed => Disconnected();
+    union Healthy: Authenticated | Authorised | Dispatched | Done;
+    union Terminal: Failed | Done;
+
 }
 
 // // Trait unions can inherit one or more previously defined union traits.

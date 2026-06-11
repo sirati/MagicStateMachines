@@ -6,7 +6,11 @@
 /// state-union declarations. It deliberately contains no runtime type and no
 /// transition bodies. Think of this as the public state-machine interface: it
 /// says which states exist, which states may be constructed initially, and
-/// which edges are legal.
+/// which edges are legal. If no state should be constructible from raw runtime
+/// data, omit the `pub Initial:` line entirely; values can still enter the
+/// machine through target-owned constructors that build a
+/// [`ConcreteStated`](crate::ConcreteStated) and pass it to
+/// [`State::from_concrete`](crate::State::from_concrete).
 ///
 /// That separation is the main enforcement mechanism. A downstream crate can
 /// implement behavior for its runtime type, but it cannot add new legal
@@ -52,7 +56,7 @@
 /// StateMachineDefinition! {
 ///     for ConnectionStandin;
 ///
-///     Initial: Disconnected | Reconnecting;
+///     pub Initial: Disconnected | Reconnecting;
 ///
 ///     transition Disconnected => Connected | Failed();
 ///     transition Connected => Authenticated(user: String);
@@ -78,6 +82,16 @@
 /// `union Online: Connected | Authenticated;` does not add transitions by
 /// itself; it only gives APIs a way to name "any online state".
 ///
+/// `pub Initial:` is intentionally a public raw-construction capability. If a
+/// state is listed there, any code that can obtain raw implementation data can
+/// call `State::new` or the generated `Runtime::with_state` for that state.
+/// Do not list a state as public initial if entering that state must be
+/// controlled by the implementation module. For that case, omit `pub Initial:`
+/// and use
+/// `priv Initial: StateName;` inside
+/// [`StateMachineImpl!`](macro@crate::StateMachineImpl) to create a private
+/// target-owned construction helper.
+///
 /// A transition declaration must end in `;`. Bodies are rejected on purpose:
 ///
 /// ```compile_fail
@@ -89,7 +103,7 @@
 /// StateMachineDefinition! {
 ///     for Standin;
 ///
-///     Initial: A;
+///     pub Initial: A;
 ///
 ///     transition A => B() {
 ///         // Effects belong in `StateMachineImpl!`, not in the definition.
@@ -103,11 +117,29 @@
 macro_rules! StateMachineDefinition {
     (
         for $standin:ty;
-        Initial: $first_initial:ident $(| $initial:ident)*;
+        pub Initial: $first_initial:ident $(| $initial:ident)*;
         $($transitions:tt)*
     ) => {
         $crate::__StateMachineDefinition!(@initial_impls $standin; $first_initial $(| $initial)*);
 
+        $crate::__StateMachineDefinition!(
+            @parse $standin;
+            $($transitions)*
+        );
+    };
+    (
+        for $standin:ty;
+        Initial: $first_initial:ident $(| $initial:ident)*;
+        $($transitions:tt)*
+    ) => {
+        ::core::compile_error!(
+            "`Initial:` in `StateMachineDefinition!` must be written as `pub Initial:` because public initial states allow anyone with raw owned implementation data to force this state onto an owned instance. Omit it for no public initial states, or use `priv Initial:` inside `StateMachineImpl!` for implementation-private construction."
+        );
+    };
+    (
+        for $standin:ty;
+        $($transitions:tt)*
+    ) => {
         $crate::__StateMachineDefinition!(
             @parse $standin;
             $($transitions)*
@@ -125,6 +157,15 @@ macro_rules! __StateMachineDefinition {
         )*
     };
     (@parse $standin:ty;) => {};
+    (
+        @parse $standin:ty;
+        Initial: $first_initial:ident $(| $initial:ident)*;
+        $($rest:tt)*
+    ) => {
+        ::core::compile_error!(
+            "`Initial:` in `StateMachineDefinition!` must be written as `pub Initial:` because public initial states allow anyone with raw owned implementation data to force this state onto an owned instance. Omit it for no public initial states, or use `priv Initial:` inside `StateMachineImpl!` for implementation-private construction."
+        );
+    };
     (
         @parse $standin:ty;
         union $name:ident:

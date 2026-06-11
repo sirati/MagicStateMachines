@@ -1,6 +1,6 @@
 use super::{SharedStateError, SharedStorage, SharedValue, WrongStateError};
 use crate::{
-    InnerInference, SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait,
+    InnerInference, MayTransition, SMut, SRef, State, StateMachineImpl, StateStorage, StateTrait,
     StateUnionRuntime, StateUnionState, Transition, TransitionCallsite,
     state_trait::{self, ErasedState},
 };
@@ -89,33 +89,6 @@ where
         }
     }
 
-    fn complete_transition<T, From, To, Args>(
-        _state: State<Self, T, From>,
-        _args: Args,
-        _callsite: TransitionCallsite,
-    ) -> State<Self, T, To>
-    where
-        T: StateMachineImpl,
-        From: StateTrait,
-        To: crate::ConcreteStateTrait,
-        T::Standin: Transition<From, To>,
-        <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
-    {
-        panic!("immutable shared-state views cannot transition")
-    }
-
-    fn complete_transition_after_effect<T, From, To>(
-        _state: State<Self, T, From>,
-        _callsite: TransitionCallsite,
-    ) -> State<Self, T, To>
-    where
-        T: StateMachineImpl,
-        From: StateTrait,
-        To: crate::ConcreteStateTrait,
-    {
-        panic!("immutable shared-state views cannot transition")
-    }
-
     fn inferred_state<T, S>(inner: &Self::Inner<T, S>) -> ErasedState
     where
         T: StateMachineImpl,
@@ -198,6 +171,19 @@ where
         }
     }
 
+    fn inferred_state<T, S>(inner: &Self::Inner<T, S>) -> ErasedState
+    where
+        T: StateMachineImpl,
+        S: StateTrait,
+    {
+        state_trait::clone_erased(&inner.pending)
+    }
+}
+
+impl<'a, Backend> MayTransition for StorageStateMut<'a, Backend>
+where
+    Backend: SharedStorage + 'a,
+{
     fn complete_transition<T, From, To, Args>(
         mut state: State<Self, T, From>,
         _args: Args,
@@ -237,14 +223,6 @@ where
             },
             marker: PhantomData,
         }
-    }
-
-    fn inferred_state<T, S>(inner: &Self::Inner<T, S>) -> ErasedState
-    where
-        T: StateMachineImpl,
-        S: StateTrait,
-    {
-        state_trait::clone_erased(&inner.pending)
     }
 }
 

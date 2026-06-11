@@ -143,6 +143,10 @@ impl Connection {
         &self.endpoint
     }
 
+    pub(crate) fn into_parts(self) -> (String, Option<String>) {
+        (self.endpoint, self.user)
+    }
+
     pub(crate) fn user(self: &State<impl SRef, Self, Authenticated>) -> &str {
         self.user
             .as_deref()

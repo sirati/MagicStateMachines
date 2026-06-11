@@ -6,17 +6,19 @@ implementation.
 
 The library is nightly-only because it uses `arbitrary_self_types`.
 
-This library in the default configuration does not use `unsafe`. If you want to use thin-pointers for dynamic dispatch of union state transitions, the feature dynZST can be used which relies on unsafe, but is very small can be easily audited.
+This library in the default configuration does not perform any `unsafe`. If you want to use thin-pointers for dynamic dispatch of union state transitions, the feature dynZST can be used which relies on unsafe, but is very small and can be easily audited.
 
-All abstractions in this library are zero-cost. The state machines exist only at compile-time and are shown to be well optimizeable by the compiler. Only when using state-machines across boundaries that the compiler can no longer prove: e.g. behind a smart-pointer like Arc or Rc the state incurs storage cost and requires dynamic dispatch. However the dynamic dispatch only happens at boundary at which the state-space gets restricted. Without any restrictions or after a state is proven concrete, all nominally dynamic dispatches are via the compile-time type system back to static dispatch. With other words, calling a dynamically dispatched transition with a concrete state will always be a zero-cost static dispatch, that the compiler can simplify or choose to inline.
+All abstractions in this library are zero-cost. The state machines exist only at compile-time and are shown to be well optimizable by the compiler. Only when using state-machines across boundaries that the compiler can no longer prove: e.g. behind a smart-pointer like Arc or Rc the state incurs storage cost and requires dynamic dispatch. However the dynamic dispatch only happens at the boundary at which the state-space gets restricted. Without any restrictions or after a state is proven concrete, all nominally dynamic dispatches are via the compile-time type system back to static dispatch. With other words, calling a dynamically dispatched transition with a concrete state will always be a zero-cost static dispatch, that the compiler can simplify or choose to inline.
 
-The main achievement of this crate is, that it allows using state-machines nearly without any boiler plate, and no penalty to coding ergonomics. A type that that so far did not have a state-machine can be retrofit without changing the overall implementation if it already adhered to the implied state-machine. Async, generics, &mut (SMut), & (&SRef), pin<&mut> (SPinMut), moving (SMove), smart-pointer, and runtime borrow-checking primitives, even traits are all supported. (default fn on traits are NOT supported)
+The main achievement of this crate is, that it allows using state-machines nearly without any boilerplate, and no penalty to coding ergonomics. A type that so far did not have a state-machine can be retrofitted without changing the overall implementation if it already adhered to the implied state-machine. Async, generics, &mut (SMut), & (&SRef), pin<&mut> (SPinMut), moving (SMove), smart-pointer, and runtime borrow-checking primitives, even traits are all supported. (default fn on traits are NOT supported)
 
-As type-system enforced state-machines change the type, every function that transitions state must always return self. This requires that &mut like borrowing to be facilitated behind a guard which must specialise on the backing storage e.g. Mutex, RwLock or RefCell. For rust std types implementations are provided, for third party they can be implemented without restrictions even for foreign types, as wrappers are mostly defined by a ZST which gets around the foreign type restriction similarily to newtypes.
+As type-system enforced state-machines change the type, every function that transitions state must always return self. This requires that &mut like borrowing be facilitated behind a guard which must specialise on the backing storage e.g. Mutex, RwLock or RefCell. For rust std types implementations are provided, for third party they can be implemented without restrictions even for foreign types, as wrappers are mostly defined by a ZST which gets around the foreign type restriction similarly to newtypes.
 
-I generally recomment that state-machines are defined in their own crate, for sake of separation of concerns as well as speeding up compile time (which is fast either way). State machine definitions function analogous to traits, in that they define a contract that implementing types must fulfil. They are however private contracts as they do not provide an interface that could be used by consumers of implementation. Consumers very much can benefit from the compile-time enforcement tho.
+I generally recommend that state-machines are defined in their own crate, for sake of separation of concerns as well as speeding up compile time (which is fast either way). State machine definitions function analogous to traits, in that they define a contract that implementing types must fulfil. They are however private contracts as they do not provide an interface that could be used by consumers of an implementation. Consumers very much can benefit from the compile-time enforcement though.
 
 In general, this crate can be relied upon for safety proofs. Be aware however as rust does not have linear types, any guard can always be mem::forget()ten.
+
+If you have forbidden unsafe, please be aware that the library exposes some unsafe functions, these themselves do not perform anything unsafe, but are marked as unsafe as they are escape hatches to get around the compiler-enforced transition and initial state rules. The same could be achieved by an API consumer calling the unsafe transmute function, the difference is that the library's unsafe functions are completely implemented in safe rust, allowing API consumers to unsafely force a state without having to prove that calling transmute would be safe (which it may not, we do not guarantee this). If you find that there is no unsafe function exposed by the API for your use case, then be aware that most likely what you are trying to achieve in fact is unsafe and would be undefined behaviour. Calling any of the library's unsafe functions only can actually constitute undefined behaviour if a state-machine is used to prove that some real unsafe functions are safe to call. In that case unsafely forcing a state invalidates that proof, and makes the real unsafe function call possibly be undefined behavior. Some of the macros generate convinience functions that are marked unsafe, but marcos never call unsafe functions. You can disable this with the gen_no_unsafe feature.
 
 ## Contract Crate
 
@@ -43,7 +45,7 @@ use states::{Authenticated, Connected, Disconnected};
 StateMachineDefinition! {
     for ConnectionStandin;
 
-    Initial: Disconnected;
+    pub Initial: Disconnected;
 
     transition Disconnected => Connected();
     transition Connected => Authenticated(user: String);
@@ -164,7 +166,7 @@ where
 }
 ```
 
-Use `EnumExt::into_enum` when runtime branching is needed (this incures the runtime cost of stack allocating the enum):
+Use `EnumExt::into_enum` when runtime branching is needed (this incurs the runtime cost of stack allocating the enum):
 
 ```rust
 use magicstatemachines::EnumExt;
@@ -218,7 +220,8 @@ that state's pinned body.
 - `dynZST`: stores dyn Trait over zero-sized types as a thin-pointer via my `dynzst` crate  (uses unsafe and relies to )
 - `tracing`: records transition source, target, and callsite - no longer zero-cost!
 - `unique-rc-arc`: enables `UniqueRc` and `UniqueArc` owned storage backends
-- the decompose feature is likely not so great, it allows for a state to be temporarily disconnected from the data, which is runtime enforced by equality on a random sentinal. This likely does break garantees by this api, because an attacker could brute force a collision. I should consider instead using an atomic counter that errors on overflow. but for now it is what it is.
+- `gen_no_unsafe`: makes macros not generate any unsafe convinience functions (no unsafe is ever called either way, this feature is in case this is a problem to auditors)
+- the decompose feature is likely not so great, it allows for a state to be temporarily disconnected from the data, which is runtime enforced by equality on a random sentinel. This likely does break guarantees by this api, because an attacker could brute force a collision. I should consider instead using an atomic counter that errors on overflow. but for now it is what it is.
   - `decompose`: enables `StateOwned::decompose` and `StateOwned::recompose`
   - `decompose-rand`: enables the stable `rand` backend for decomposition IDs
   - `nightly-random`: uses nightly `std::random` for decomposition IDs

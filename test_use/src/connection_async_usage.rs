@@ -1,9 +1,10 @@
-use crate::connection_async::ConnectionAsync;
+use crate::{connection::Connection, connection_async::ConnectionAsync};
 use core::{
     future::Future,
     pin::pin,
     task::{Context, Poll, Waker},
 };
+use magicstatemachines::State;
 
 fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
     let mut future = pin!(future);
@@ -49,4 +50,15 @@ pub(crate) fn run() {
         c
     });
     println!("{} is asynchronously online via enum", online.endpoint());
+
+    let converted = Connection::new("localhost:8087")
+        .connect()
+        .authenticate("dave");
+    let converted: State<_, ConnectionAsync, _> =
+        ConnectionAsync::from_authenticated_connection(converted);
+    let converted = block_on(converted.disconnect());
+    println!(
+        "{} was converted into the async implementation",
+        converted.raw_endpoint()
+    );
 }

@@ -255,6 +255,29 @@ pub trait StateStorage: Sized {
     where
         T: StateMachineImpl;
 
+    #[doc(hidden)]
+    fn inferred_state<T, State>(inner: &Self::Inner<T, State>) -> state_trait::ErasedState
+    where
+        T: StateMachineImpl,
+        State: crate::StateTrait,
+    {
+        let _ = inner;
+        state_trait::static_erased_state::<State>()
+    }
+}
+
+/// Storage backend whose state token may be consumed and retagged by a transition.
+///
+/// [`StateStorage`] only describes how a typed state view is represented. This
+/// trait is the additional capability required to complete a transition after
+/// the state-machine contract has proven that the edge is legal.
+///
+/// Read-only storage backends intentionally do not implement this trait. For
+/// example, immutable shared borrows implement [`SRef`] so read-only methods
+/// can run, but they cannot complete [`transition!`](macro@crate::transition)
+/// calls. Mutable, pinned-mutable, and move-capable storage inherit this
+/// capability through [`SMut`], [`SPinMut`], and [`SMove`].
+pub trait MayTransition: StateStorage {
     /// Retags a state after checking that `Args` matches the declared transition signature.
     ///
     /// Storage backends normally delegate this to their inner representation.
@@ -281,16 +304,6 @@ pub trait StateStorage: Sized {
         T: StateMachineImpl,
         From: crate::StateTrait,
         To: crate::ConcreteStateTrait;
-
-    #[doc(hidden)]
-    fn inferred_state<T, State>(inner: &Self::Inner<T, State>) -> state_trait::ErasedState
-    where
-        T: StateMachineImpl,
-        State: crate::StateTrait,
-    {
-        let _ = inner;
-        state_trait::static_erased_state::<State>()
-    }
 }
 
 #[doc(hidden)]
@@ -299,7 +312,7 @@ pub fn complete_transition_after_effect<Storage, T, From, To>(
     callsite: TransitionCallsite,
 ) -> State<Storage, T, To>
 where
-    Storage: StateStorage,
+    Storage: MayTransition,
     T: StateMachineImpl,
     From: crate::StateTrait,
     To: crate::ConcreteStateTrait,
@@ -337,7 +350,7 @@ pub trait SRef: StateStorage {
 /// [`transition!`](macro@crate::transition). Transition effect bodies always
 /// receive `&mut T`, so a transition method normally needs this bound even if
 /// the body is empty.
-pub trait SMut: SRef {
+pub trait SMut: SRef + MayTransition {
     /// Mutably borrows the runtime implementation from this storage backend.
     fn s_mut<T, State>(inner: &mut Self::Inner<T, State>) -> &mut T
     where
@@ -375,7 +388,7 @@ pub trait SPinRef: SRef {
 /// This is the capability required by pinned transition effects. It does not
 /// imply [`SMut`]: a backend may safely provide `Pin<&mut T>` for `!Unpin`
 /// values while still refusing to provide `&mut T`.
-pub trait SPinMut: SPinRef {
+pub trait SPinMut: SPinRef + MayTransition {
     /// Mutably borrows the runtime implementation as a pinned reference.
     fn s_pin_mut<T, State>(inner: &mut Self::Inner<T, State>) -> Pin<&mut T>
     where
@@ -387,7 +400,35 @@ pub trait SPinMut: SPinRef {
 /// Use this when an API must move the backend representation itself rather
 /// than just read or mutate the runtime value. Most transition methods only
 /// need [`SMut`].
-pub trait SMove: StateStorage {}
+pub trait SMove: MayTransition {}
+
+/// Storage backend that can transform the runtime value while preserving state.
+///
+/// This is an internal storage hook used by wrappers that carry extra state
+/// metadata while retagging or discriminating values. It is separate from
+/// [`SMove`] because consuming a state token by value does
+/// not always mean the runtime value itself can be safely moved out. For
+/// example, pinned storage can only implement this for source runtimes that are
+/// safe to move out of the pin.
+pub trait SMapRuntime<FromRuntime, ToRuntime>: SMove
+where
+    FromRuntime: StateMachineImpl,
+    ToRuntime: StateMachineImpl,
+{
+    /// Applies `f` to the runtime value inside `state` and returns the same
+    /// storage and state marker with the new runtime type.
+    ///
+    /// This operation must preserve all state metadata owned by the storage,
+    /// such as transition traces or union discriminators. It may only be
+    /// implemented when the backend can safely move the source runtime value
+    /// out of its representation.
+    fn map_runtime<StateMarkerType, F>(
+        state: State<Self, FromRuntime, StateMarkerType>,
+        f: F,
+    ) -> State<Self, ToRuntime, StateMarkerType>
+    where
+        F: FnOnce(FromRuntime) -> ToRuntime;
+}
 
 /// A state token parameterized by storage, runtime implementation, and state.
 ///
@@ -429,6 +470,66 @@ where
 {
     pub(crate) inner: Storage::Inner<T, S>,
     pub(crate) marker: StateMarker<Storage, T, S>,
+}
+
+/// Raw runtime data paired with a concrete state marker.
+///
+/// `ConcreteStated<T, S>` is the narrow escape hatch for implementation-owned
+/// construction. It does not dereference to `T` and it does not support
+/// transitions; it can only be created unsafely or by helpers generated in the
+/// implementation module, then consumed by [`State::from_concrete`] to create a
+/// directly owned state.
+///
+/// Creating this value asserts that the raw `T` really satisfies the invariant
+/// represented by concrete state `S`. For public construction, prefer
+/// [`State::new`], which is gated by [`Initial`]. For implementation-owned
+/// conversions, use the private `with_state_priv` helper generated by
+/// [`StateMachineImpl!`](macro@crate::StateMachineImpl).
+pub struct ConcreteStated<T, S>
+where
+    S: crate::StateMarker<Kind = ConcreteStateKind>,
+{
+    value: T,
+    state: PhantomData<fn() -> S>,
+}
+
+impl<T, S> ConcreteStated<T, S>
+where
+    S: crate::StateMarker<Kind = ConcreteStateKind>,
+{
+    /// Attaches raw runtime data to a concrete state marker.
+    ///
+    /// # Safety
+    ///
+    /// The caller must prove by construction that `value` is valid for state
+    /// `S`. This function can forge typestate authority if used incorrectly.
+    #[allow(unsafe_code)]
+    #[must_use]
+    pub unsafe fn new(value: T) -> Self {
+        Self {
+            value,
+            state: PhantomData,
+        }
+    }
+
+    /// Removes the concrete state marker and returns the raw runtime value.
+    #[must_use]
+    pub fn into_raw(self) -> T {
+        self.value
+    }
+}
+
+#[doc(hidden)]
+#[must_use]
+pub fn concrete_stated_new<T, S>(value: T, _token: T::TransitionToken) -> ConcreteStated<T, S>
+where
+    T: StateMachineImpl,
+    S: crate::ConcreteStateTrait,
+{
+    ConcreteStated {
+        value,
+        state: PhantomData,
+    }
 }
 
 /// A result whose success and error values are states of the same machine.
@@ -607,6 +708,7 @@ where
     where
         T::Standin: Transition<From, To>,
         <T::Standin as Transition<From, To>>::F: crate::TransitionSignature<Args>,
+        Storage: MayTransition,
         From: crate::StateTrait,
         To: crate::ConcreteStateTrait,
     {
@@ -1271,7 +1373,10 @@ where
     ///
     /// This is the normal entry point for a state machine. It only compiles
     /// when the definition crate declared `S` as an initial state for
-    /// `T::Standin`.
+    /// `T::Standin`. That declaration is a public constructor contract:
+    /// anyone with raw `T` can create `State<SOwned, T, S>` for an initial
+    /// state. States that should only be entered by target-owned conversions
+    /// should not be listed as `Initial`.
     ///
     /// ```ignore
     /// use magicstatemachines::{SOwned, State};
@@ -1292,6 +1397,43 @@ where
         State {
             inner: <StorageStateOwned as StateStorageNew>::new(value),
             marker: PhantomData,
+        }
+    }
+
+    /// Constructs a directly owned state from implementation-owned state proof.
+    ///
+    /// `ConcreteStated` is where the unsafe or private raw construction
+    /// decision happens. This function only consumes that proof object and
+    /// creates the ordinary owned state wrapper.
+    #[must_use]
+    pub fn from_concrete(value: ConcreteStated<T, S>) -> Self
+    where
+        S: crate::ConcreteStateTrait,
+    {
+        State {
+            inner: crate::StateOwned {
+                value: value.into_raw(),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: Vec::new(),
+            },
+            marker: PhantomData,
+        }
+    }
+
+    /// Consumes a directly owned state and returns raw data plus its concrete marker.
+    ///
+    /// This is intended for implementation-owned conversions. The returned
+    /// value can be inspected only by consuming it with
+    /// [`ConcreteStated::into_raw`].
+    #[must_use]
+    pub fn into_concrete(state: Self) -> ConcreteStated<T, S>
+    where
+        S: crate::ConcreteStateTrait,
+    {
+        ConcreteStated {
+            value: state.inner.value,
+            state: PhantomData,
         }
     }
 }

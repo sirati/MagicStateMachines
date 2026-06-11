@@ -1,7 +1,7 @@
 use crate::{
-    SMove, SMut, SPinMut, SPinRef, SRef, State, StateInference, StateMachineImpl, StateMarker,
-    StateStorage, StateTrait, Transition, TransitionCallsite, TransitionProof, UnionStateKind,
-    state_trait,
+    MayTransition, SMapRuntime, SMove, SMut, SPinMut, SPinRef, SRef, State, StateInference,
+    StateMachineImpl, StateMarker, StateStorage, StateTrait, Transition, TransitionCallsite,
+    TransitionProof, UnionStateKind, state_trait,
 };
 use core::{any::TypeId, marker::PhantomData, pin::Pin};
 
@@ -342,6 +342,19 @@ where
         }
     }
 
+    fn inferred_state<T, State>(inner: &Self::Inner<T, State>) -> state_trait::ErasedState
+    where
+        T: StateMachineImpl,
+        State: StateTrait,
+    {
+        inner.inference.state::<Storage, T, State>(&inner.inner)
+    }
+}
+
+impl<Storage> MayTransition for SDiscriminated<Storage>
+where
+    Storage: MayTransition,
+{
     fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         args: Args,
@@ -389,14 +402,6 @@ where
             inner: state.inner,
             inference,
         })
-    }
-
-    fn inferred_state<T, State>(inner: &Self::Inner<T, State>) -> state_trait::ErasedState
-    where
-        T: StateMachineImpl,
-        State: StateTrait,
-    {
-        inner.inference.state::<Storage, T, State>(&inner.inner)
     }
 }
 
@@ -449,6 +454,27 @@ where
 }
 
 impl<Storage> SMove for SDiscriminated<Storage> where Storage: SMove {}
+
+impl<Storage, FromRuntime, ToRuntime> SMapRuntime<FromRuntime, ToRuntime>
+    for SDiscriminated<Storage>
+where
+    Storage: SMapRuntime<FromRuntime, ToRuntime>,
+    FromRuntime: StateMachineImpl,
+    ToRuntime: StateMachineImpl,
+{
+    fn map_runtime<S, F>(state: State<Self, FromRuntime, S>, f: F) -> State<Self, ToRuntime, S>
+    where
+        F: FnOnce(FromRuntime) -> ToRuntime,
+    {
+        let inference = state.inner.inference;
+        let state = State::<Storage, FromRuntime, S>::from_inner(state.inner.inner);
+        let state = Storage::map_runtime(state, f);
+        State::from_inner(DiscriminatedInner {
+            inner: state.inner,
+            inference,
+        })
+    }
+}
 
 /// Converts a concrete or already-erased member state into a union state.
 #[doc(hidden)]

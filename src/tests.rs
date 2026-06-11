@@ -67,13 +67,13 @@ crate::States! {
 crate::StateMachineDefinition! {
     for MultiInitialMachine;
 
-    Initial: FirstInitial | SecondInitial;
+    pub Initial: FirstInitial | SecondInitial;
 }
 
 crate::StateMachineDefinition! {
     for MultiTargetMachine;
 
-    Initial: MultiFromA;
+    pub Initial: MultiFromA;
 
     transition MultiFromA | MultiFromB => MultiToA | MultiToB(flag: bool);
 }
@@ -164,6 +164,18 @@ fn generic_state_preserves_storage_across_transitions() {
         let _: State<StorageStateOwnedUniqueArc, Runtime, Running> =
             transition_state(ready, TransitionToken).call(());
     }
+}
+
+#[test]
+fn owned_state_can_round_trip_through_concrete_state_proof() {
+    let ready = State::<SOwned, _, Ready>::new(Runtime);
+    let concrete = State::into_concrete(ready);
+    let raw = concrete.into_raw();
+    let concrete = crate::__private::concrete_stated_new::<_, Ready>(raw, TransitionToken);
+    let ready = State::<SOwned, Runtime, Ready>::from_concrete(concrete);
+
+    fn assert_ready_state(_: State<SOwned, Runtime, Ready>) {}
+    assert_ready_state(ready);
 }
 
 #[test]

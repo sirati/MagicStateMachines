@@ -3,12 +3,14 @@
     feature(random)
 )]
 #![cfg_attr(feature = "unique-rc-arc", feature(unique_rc_arc))]
+#![cfg_attr(not(feature = "gen_no_unsafe"), feature(allow_internal_unsafe))]
 #![feature(
     arbitrary_self_types,
     associated_type_defaults,
     auto_traits,
     negative_impls
 )]
+#![cfg_attr(not(feature = "gen_no_unsafe"), allow(internal_features))]
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
@@ -90,11 +92,11 @@ pub use shared::{
     WrongStateError, transition_mut,
 };
 pub use state::{
-    ConcreteProofTransitionCall, DiscriminatedTransitionCall, EffectTransitionCall, InferenceKind,
-    InnerInference, InnerStateInference, KindProofTransitionCall, OuterInference,
-    PinnedDiscriminatedTransitionCall, PinnedEffectTransitionCall,
+    ConcreteProofTransitionCall, ConcreteStated, DiscriminatedTransitionCall, EffectTransitionCall,
+    InferenceKind, InnerInference, InnerStateInference, KindProofTransitionCall, MayTransition,
+    OuterInference, PinnedDiscriminatedTransitionCall, PinnedEffectTransitionCall,
     PinnedStateUnionProofTransitionCall, PinnedTransitionEffect, PinnedTransitionEffectSelector,
-    SBox, SMove, SMut, SOwned, SPin, SPinBox, SPinMut, SPinRef, SRef, SResult, State,
+    SBox, SMapRuntime, SMove, SMut, SOwned, SPin, SPinBox, SPinMut, SPinRef, SRef, SResult, State,
     StateInference, StateOwned, StateStorage, StateStorageNew, StateTransitionCall,
     StateUnionProofTransitionCall, StorageStateOwned, StorageStateOwnedBox,
     StorageStateOwnedPinBox, TransitionCall, TransitionCallsite, TransitionEffect,
@@ -138,6 +140,7 @@ pub use util::EnumExt;
 
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::state::concrete_stated_new;
     pub use paste::paste;
 }
 

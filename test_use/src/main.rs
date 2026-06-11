@@ -6,12 +6,14 @@ mod connection;
 mod connection_async;
 mod connection_async_usage;
 mod custom_backend;
+mod job;
 mod owned;
 
 fn main() {
     owned::run();
     connection_async_usage::run();
     connectable::run();
+    job::run();
     custom_backend::run();
 }
 
@@ -26,7 +28,9 @@ mod tests {
     use super::connectable::{Connectable, ConnectionViaTrait};
     use super::connection::Connection;
     use super::connection_async::ConnectionAsync;
-    use magicstatemachines::{In, StateUnionDiscriminant};
+    use super::job::Job;
+    use magicstatemachines::{In, SOwned, State, StateUnionDiscriminant};
+    use test_def::states::{Authenticated, Disconnected};
     use test_def::{Online, OnlineEnum};
 
     fn block_on<Output>(future: impl Future<Output = Output>) -> Output {
@@ -96,6 +100,70 @@ mod tests {
         });
 
         assert_eq!(online.endpoint(), "localhost:8084");
+    }
+
+    #[test]
+    fn sync_connection_state_can_convert_to_async_connection_state() {
+        let converted: State<SOwned, ConnectionAsync, Authenticated> =
+            ConnectionAsync::from_authenticated_connection(
+                Connection::new("localhost:8088")
+                    .connect()
+                    .authenticate("alice"),
+            );
+
+        assert_eq!(converted.endpoint(), "localhost:8088");
+        assert_eq!(converted.user(), "alice");
+
+        let connected = block_on(converted.logout());
+        assert_eq!(connected.endpoint(), "localhost:8088");
+    }
+
+    #[test]
+    fn authenticated_connection_can_start_overlapping_job_state_machine() {
+        let job: State<SOwned, Job, Authenticated> = Job::from_authenticated_connection(
+            Connection::new("localhost:8095")
+                .connect()
+                .authenticate("dana"),
+        );
+
+        assert_eq!(job.endpoint(), "localhost:8095");
+        assert_eq!(job.user(), "dana");
+
+        let job = match job.authorise(true) {
+            Ok(job) => job,
+            Err(_) => panic!("job authorised"),
+        };
+        assert_eq!(job.endpoint(), "localhost:8095");
+
+        let job = match job.dispatch(true) {
+            Ok(job) => job,
+            Err(_) => panic!("job dispatched"),
+        };
+        assert_eq!(job.attempts(), 1);
+
+        let done = match job.complete(true) {
+            Ok(done) => done,
+            Err(_) => panic!("job done"),
+        };
+        let disconnected: State<SOwned, Job, Disconnected> = done.disconnect();
+        assert_eq!(disconnected.raw_endpoint(), "localhost:8095");
+    }
+
+    #[test]
+    fn overlapping_job_can_fail_and_disconnect() {
+        let job: State<SOwned, Job, Authenticated> = Job::from_authenticated_connection(
+            Connection::new("localhost:8096")
+                .connect()
+                .authenticate("frank"),
+        );
+
+        let failed = match job.authorise(false) {
+            Ok(_) => panic!("job rejected"),
+            Err(failed) => failed,
+        };
+        let disconnected = failed.disconnect();
+
+        assert_eq!(disconnected.raw_endpoint(), "localhost:8096");
     }
 
     #[test]

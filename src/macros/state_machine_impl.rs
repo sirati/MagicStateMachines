@@ -7,6 +7,30 @@
 /// [`transition!`](macro@crate::transition). Keeping the token private is what
 /// prevents callers from retagging states directly.
 ///
+/// The macro also emits raw-state construction helpers for the implementation:
+///
+/// - `Runtime::with_state(value)` is public and safe, but only works for
+///   states declared `Initial` by the definition crate. Treat `Initial` as a
+///   public constructor contract: anyone with raw `Runtime` can attach one of
+///   those states.
+/// - `Runtime::with_state_priv(value)` is private to the invocation module and
+///   works for states listed with `priv Initial: StateName;` inside this
+///   macro. Use this for target-owned conversions from another state machine.
+/// - `Runtime::with_state_unsafe(value)` is the explicit unsafe escape hatch
+///   for arbitrary concrete states.
+///
+/// A private raw construction state is declared before or between transitions:
+///
+/// ```ignore
+/// StateMachineImpl! {
+///     Job: JobStandin;
+///
+///     priv Initial: Authenticated;
+///
+///     transition Authenticated => Authorised();
+/// }
+/// ```
+///
 /// Transition headers must match transitions declared by
 /// [`StateMachineDefinition!`](macro@crate::StateMachineDefinition). The
 /// definition macro proves that an edge is legal; this macro decides what
@@ -204,7 +228,44 @@
 /// `transition!(pin dyn Online self)` when the current concrete member should
 /// be discriminated first and each member's own pinned body should run.
 #[macro_export]
+#[cfg_attr(not(feature = "gen_no_unsafe"), allow(unsafe_code))]
+#[cfg_attr(not(feature = "gen_no_unsafe"), allow_internal_unsafe)]
 macro_rules! StateMachineImpl {
+    ($($input:tt)*) => {
+        $crate::__StateMachineImplPublic!($($input)*);
+    };
+}
+
+#[cfg(not(feature = "gen_no_unsafe"))]
+#[doc(hidden)]
+#[macro_export]
+#[allow(unsafe_code)]
+#[allow_internal_unsafe]
+macro_rules! __StateMachineImplUnsafeConstructor {
+    ($implementation:ty) => {
+        #[doc(hidden)]
+        pub unsafe fn with_state_unsafe<S>(
+            value: $implementation,
+        ) -> $crate::ConcreteStated<$implementation, S>
+        where
+            S: $crate::ConcreteStateTrait,
+        {
+            // This unsafe function intentionally uses only safe Rust in its body.
+            $crate::__private::concrete_stated_new(value, __StateMachineTransitionToken(()))
+        }
+    };
+}
+
+#[cfg(feature = "gen_no_unsafe")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __StateMachineImplUnsafeConstructor {
+    ($implementation:ty) => {};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __StateMachineImplPublic {
     (
         $implementation:ty : $standin:ty;
         $($transitions:tt)*
@@ -216,6 +277,31 @@ macro_rules! StateMachineImpl {
             type Standin = $standin;
             type Impl = $implementation;
             type TransitionToken = __StateMachineTransitionToken;
+        }
+
+        trait __StateMachineRawState<S> {}
+
+        #[allow(dead_code)]
+        impl $implementation {
+            #[doc(hidden)]
+            fn with_state_priv<S>(value: $implementation) -> $crate::ConcreteStated<$implementation, S>
+            where
+                S: $crate::ConcreteStateTrait,
+                __StateMachineTransitionToken: __StateMachineRawState<S>,
+            {
+                $crate::__private::concrete_stated_new(value, __StateMachineTransitionToken(()))
+            }
+
+            #[doc(hidden)]
+            pub fn with_state<S>(value: $implementation) -> $crate::ConcreteStated<$implementation, S>
+            where
+                S: $crate::ConcreteStateTrait,
+                $standin: $crate::Initial<S>,
+            {
+                $crate::__private::concrete_stated_new(value, __StateMachineTransitionToken(()))
+            }
+
+            $crate::__StateMachineImplUnsafeConstructor!($implementation);
         }
 
         $crate::__StateMachineImpl!(
@@ -802,6 +888,31 @@ macro_rules! StateMachineImpl {
             type TransitionToken = __StateMachineTransitionToken;
         }
 
+        trait __StateMachineRawState<S> {}
+
+        #[allow(dead_code)]
+        impl $implementation {
+            #[doc(hidden)]
+            fn with_state_priv<S>(value: $implementation) -> $crate::ConcreteStated<$implementation, S>
+            where
+                S: $crate::ConcreteStateTrait,
+                __StateMachineTransitionToken: __StateMachineRawState<S>,
+            {
+                $crate::__private::concrete_stated_new(value, __StateMachineTransitionToken(()))
+            }
+
+            #[doc(hidden)]
+            pub fn with_state<S>(value: $implementation) -> $crate::ConcreteStated<$implementation, S>
+            where
+                S: $crate::ConcreteStateTrait,
+                $standin: $crate::Initial<S>,
+            {
+                $crate::__private::concrete_stated_new(value, __StateMachineTransitionToken(()))
+            }
+
+            $crate::__StateMachineImplUnsafeConstructor!($implementation);
+        }
+
         #[allow(non_snake_case)]
         trait __StateTransitionExt<T, From>
         where
@@ -907,6 +1018,33 @@ macro_rules! __StateMachineImpl {
         @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
     ) => {
         $crate::__StateMachineImpl!(@finish_pending [$($pending)*]);
+    };
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+        priv Initial: $first_state:ident $(| $state:ident)*;
+        $($rest:tt)*
+    ) => {
+        $crate::__StateMachineImpl!(@emit_pending $implementation; $standin; {}; $($pending)*);
+        $crate::__StateMachineImpl!(@raw_state_impls $first_state $(| $state)*);
+        $crate::__StateMachineImpl!(@parse $implementation; $standin; []; $($rest)*);
+    };
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+        Initial: $first_state:ident $(| $state:ident)*;
+        $($rest:tt)*
+    ) => {
+        ::core::compile_error!(
+            "`Initial:` inside `StateMachineImpl!` would declare a public initial state, but public initial states belong in `StateMachineDefinition!` and are already available through `with_state`. Use `priv Initial:` here only for private implementation-owned initial states, and do not repeat public definition initial states."
+        );
+    };
+    (
+        @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
+        with_state $first_state:ident $(| $state:ident)*;
+        $($rest:tt)*
+    ) => {
+        ::core::compile_error!(
+            "`with_state` has been renamed to `priv Initial:` in `StateMachineImpl!`; use `priv Initial: StateName;` for private implementation-owned initial states."
+        );
     };
     (
         @parse $implementation:ty; $standin:ty; [$($pending:tt)*];
@@ -1023,6 +1161,12 @@ macro_rules! __StateMachineImpl {
             @emit_pending $implementation; $standin; { $($body)* };
             $($rest)*
         );
+    };
+    (@raw_state_impls $first_state:ident $(| $state:ident)*) => {
+        impl __StateMachineRawState<$first_state> for __StateMachineTransitionToken {}
+        $(
+            impl __StateMachineRawState<$state> for __StateMachineTransitionToken {}
+        )*
     };
     (
         @effect_impls $implementation:ty; $standin:ty; $first_from:ident $(| $from:ident)* => $to:ident

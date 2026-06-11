@@ -1,5 +1,6 @@
 use super::{
-    SMove, SMut, SPinMut, SPinRef, SRef, State, StateStorage, StateStorageNew, TransitionCallsite,
+    MayTransition, SMapRuntime, SMove, SMut, SPinMut, SPinRef, SRef, State, StateStorage,
+    StateStorageNew, TransitionCallsite,
 };
 use crate::state::owned::{StateOwned, complete_transition};
 use crate::{Initial, StateMachineImpl, Transition};
@@ -46,7 +47,9 @@ impl StateStorage for StorageStateOwned {
     {
         super::retag_owned(inner)
     }
+}
 
+impl MayTransition for StorageStateOwned {
     fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         _args: Args,
@@ -111,6 +114,27 @@ impl SMut for StorageStateOwned {
 
 impl SMove for StorageStateOwned {}
 
+impl<FromRuntime, ToRuntime> SMapRuntime<FromRuntime, ToRuntime> for StorageStateOwned
+where
+    FromRuntime: StateMachineImpl,
+    ToRuntime: StateMachineImpl,
+{
+    fn map_runtime<S, F>(state: State<Self, FromRuntime, S>, f: F) -> State<Self, ToRuntime, S>
+    where
+        F: FnOnce(FromRuntime) -> ToRuntime,
+    {
+        State {
+            inner: StateOwned {
+                value: f(state.inner.value),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
+            marker: PhantomData,
+        }
+    }
+}
+
 macro_rules! indirect_owned_storage {
     ($storage:ty, $wrapper:ident) => {
         impl StateStorage for $storage {
@@ -129,7 +153,9 @@ macro_rules! indirect_owned_storage {
             {
                 super::retag_owned(inner)
             }
+        }
 
+        impl MayTransition for $storage {
             fn complete_transition<T, From, To, Args>(
                 state: State<Self, T, From>,
                 _args: Args,
@@ -194,9 +220,44 @@ macro_rules! indirect_owned_storage {
 
         impl SMove for $storage {}
     };
+
+    ($storage:ty, $wrapper:ident, $map:path) => {
+        indirect_owned_storage!($storage, $wrapper);
+        impl<FromRuntime, ToRuntime> SMapRuntime<FromRuntime, ToRuntime> for $storage
+        where
+            FromRuntime: StateMachineImpl,
+            ToRuntime: StateMachineImpl,
+        {
+            fn map_runtime<S, F>(
+                state: State<Self, FromRuntime, S>,
+                f: F,
+            ) -> State<Self, ToRuntime, S>
+            where
+                F: FnOnce(FromRuntime) -> ToRuntime,
+            {
+                State {
+                    inner: StateOwned {
+                        value: $map(state.inner.value, f),
+                        state: PhantomData,
+                        #[cfg(feature = "tracing")]
+                        trace: state.inner.trace,
+                    },
+                    marker: PhantomData,
+                }
+            }
+        }
+    };
 }
 
-indirect_owned_storage!(StorageStateOwnedBox, Box);
+fn map_box<FromRuntime, ToRuntime, F>(value: Box<FromRuntime>, f: F) -> Box<ToRuntime>
+where
+    F: FnOnce(FromRuntime) -> ToRuntime,
+{
+    Box::new(f(*value))
+}
+
+indirect_owned_storage!(StorageStateOwnedBox, Box, map_box);
+
 #[cfg(feature = "unique-rc-arc")]
 indirect_owned_storage!(StorageStateOwnedUniqueRc, UniqueRc);
 #[cfg(feature = "unique-rc-arc")]
@@ -218,7 +279,9 @@ impl StateStorage for StorageStateOwnedPinBox {
     {
         super::retag_owned(inner)
     }
+}
 
+impl MayTransition for StorageStateOwnedPinBox {
     fn complete_transition<T, From, To, Args>(
         state: State<Self, T, From>,
         _args: Args,
@@ -291,3 +354,24 @@ impl SPinMut for StorageStateOwnedPinBox {
 }
 
 impl SMove for StorageStateOwnedPinBox {}
+
+impl<FromRuntime, ToRuntime> SMapRuntime<FromRuntime, ToRuntime> for StorageStateOwnedPinBox
+where
+    FromRuntime: StateMachineImpl + Unpin,
+    ToRuntime: StateMachineImpl,
+{
+    fn map_runtime<S, F>(state: State<Self, FromRuntime, S>, f: F) -> State<Self, ToRuntime, S>
+    where
+        F: FnOnce(FromRuntime) -> ToRuntime,
+    {
+        State {
+            inner: StateOwned {
+                value: Box::pin(f(*Pin::into_inner(state.inner.value))),
+                state: PhantomData,
+                #[cfg(feature = "tracing")]
+                trace: state.inner.trace,
+            },
+            marker: PhantomData,
+        }
+    }
+}

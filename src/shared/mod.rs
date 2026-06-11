@@ -75,7 +75,7 @@ pub use weak::{WeakSArc, WeakSArcMutex, WeakSArcRwLock, WeakSRc, WeakSRcRefCell}
 /// StateMachineDefinition! {
 ///     for Standin;
 ///
-///     Initial: A;
+///     pub Initial: A;
 ///     transition A => B();
 ///     union Any: A | B;
 /// }

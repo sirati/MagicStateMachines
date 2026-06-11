@@ -115,8 +115,71 @@
 /// ```ignore
 /// transition!(self, user);
 /// ```
+///
+/// The `const` and `dyn` forms always need the union/state marker before the
+/// receiver. Omitting it is rejected with a targeted compiler error:
+///
+/// ```compile_fail
+/// struct Example;
+///
+/// impl Example {
+///     fn bad(self) {
+///         magicstatemachines::transition!(const self);
+///     }
+/// }
+/// ```
+///
+/// ```compile_fail
+/// struct Example;
+///
+/// impl Example {
+///     fn bad(self) {
+///         magicstatemachines::transition!(dyn self);
+///     }
+/// }
+/// ```
+///
+/// ```compile_fail
+/// struct Example;
+///
+/// impl Example {
+///     fn bad(self) {
+///         magicstatemachines::transition!(pin const self);
+///     }
+/// }
+/// ```
+///
+/// ```compile_fail
+/// struct Example;
+///
+/// impl Example {
+///     fn bad(self) {
+///         magicstatemachines::transition!(pin dyn self);
+///     }
+/// }
+/// ```
 #[macro_export]
 macro_rules! transition {
+    (pin const self $($rest:tt)*) => {
+        ::core::compile_error!(
+            "the From state needs to be provided: use `transition!(pin const FromState self, ...)` or `transition!(pin const path::To::FromState, self, ...)`"
+        )
+    };
+    (pin dyn self $($rest:tt)*) => {
+        ::core::compile_error!(
+            "the From state needs to be provided: use `transition!(pin dyn FromState self, ...)` or `transition!(pin dyn path::To::FromState, self, ...)`"
+        )
+    };
+    (const self $($rest:tt)*) => {
+        ::core::compile_error!(
+            "the From state needs to be provided: use `transition!(const FromState self, ...)` or `transition!(const path::To::FromState, self, ...)`"
+        )
+    };
+    (dyn self $($rest:tt)*) => {
+        ::core::compile_error!(
+            "the From state needs to be provided: use `transition!(dyn FromState self, ...)` or `transition!(dyn path::To::FromState, self, ...)`"
+        )
+    };
     (pin const $marker:path, $state:expr) => {
         $crate::transition!(@call $state._magicsm_transitionPinConst($marker))
     };

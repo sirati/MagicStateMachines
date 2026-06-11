@@ -1,6 +1,6 @@
 [package]
 name = "MagicStateMachines"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Ergonomic typestate wrappers for compiler-enforced state machines with separable contracts"
@@ -24,6 +24,7 @@ decompose = []
 decompose-rand = ["decompose", "dep:rand"]
 dynZST = ["dep:dynzst"]
 nightly-random = []
+gen_no_unsafe = []
 tracing = []
 unique-rc-arc = []
 

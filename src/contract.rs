@@ -26,7 +26,7 @@ use std::sync::UniqueArc;
 /// magicstatemachines::StateMachineDefinition! {
 ///     for ConnectionStandin;
 ///
-///     Initial: Disconnected;
+///     pub Initial: Disconnected;
 /// }
 /// ```
 pub trait Initial<TState> {}
@@ -59,7 +59,7 @@ pub trait Initial<TState> {}
 /// magicstatemachines::StateMachineDefinition! {
 ///     for ConnectionStandin;
 ///
-///     Initial: Connected;
+///     pub Initial: Connected;
 ///     transition Connected => Authenticated(user: String);
 /// }
 /// ```
